@@ -12,7 +12,7 @@
     const start = DATA.classStart[cls];
     const char = {
       id: U.uid('ch'), name: name.trim().slice(0, 16) || 'Wanderer', cls, level: 1, xp: 0, paragonLevel: 0, paragonXp: 0,
-      appearance: Object.assign({ skin: 'tan', hair: 'brown', body: 'average' }, appearance || {}), created: Date.now(), playtime: 0,
+      appearance: Object.assign({ skin: 'tan', hair: 'brown', body: 'average', frame: 'broad', hairStyle: 'short', beard: 'none', eyes: 'brown' }, appearance || {}), created: Date.now(), playtime: 0,
       skills: { alloc: {}, upgrades: {}, bar: [null, null, null, null, null, null] }, skillPointsBonus: 0,
       mechanics: {}, paragon: { bonus: 0, boards: [], glyphs: {} },
       equipment: {}, inventory: [], materials: { gold: 500, obols: 0 },

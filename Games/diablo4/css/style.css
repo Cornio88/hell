@@ -99,6 +99,7 @@ hr { border: none; border-top: 1px solid var(--line); margin: 8px 0; }
 /* Combat HUD */
 #screen-combat { background: #000; }
 #game { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+#overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 #hud { position: absolute; inset: 0; pointer-events: none; }
 #hud > * { pointer-events: auto; }
 #hud-top { position: absolute; left: calc(12px + var(--safe-left)); top: calc(10px + var(--safe-top)); max-width: 46vw; pointer-events: none; }
@@ -134,3 +135,13 @@ hr { border: none; border-top: 1px solid var(--line); margin: 8px 0; }
 .cosmetic { display: flex; align-items: center; gap: 8px; } .cosmetic .sw { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); flex-shrink: 0; }
 .rarity-normal { color: #cfcfcf; } .rarity-magic { color: var(--magic); } .rarity-rare { color: var(--rare); } .rarity-legendary { color: var(--legendary); } .rarity-unique { color: var(--unique); } .rarity-mythic { color: var(--mythic); }
 kbd { background: var(--bg3); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 11px; }
+
+/* 3D character preview */
+.charview { width: 100%; height: 100%; display: block; touch-action: none; border-radius: 12px; background: radial-gradient(ellipse at 50% 30%, #2a2432 0%, #0b0b0f 75%); }
+.viewbox { position: relative; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #0b0b0f; }
+.viewbox .hint { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; font-size: 11px; color: var(--dim); pointer-events: none; }
+.createlayout { display: grid; grid-template-columns: minmax(260px, 2fr) 3fr; gap: 12px; align-items: start; }
+.createlayout .viewbox { height: min(70vh, 560px); position: sticky; top: 0; }
+@media (max-width: 760px) { .createlayout { grid-template-columns: 1fr; } .createlayout .viewbox { height: 300px; position: static; } }
+.optrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; } .optrow .lbl { width: 70px; color: var(--dim); font-size: 12px; flex-shrink: 0; }
+.sideview { float: right; width: 160px; height: 220px; margin: 0 0 8px 10px; } @media (max-width: 560px) { .sideview { float: none; width: 100%; height: 220px; margin: 0 0 8px; } }

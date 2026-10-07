@@ -11,14 +11,14 @@
   UI.SKILL_ICONS = { basic: '✦', core: '✸', macabre: '☠', corruption: '☽', summoning: '⚰', ultimate: '★', defensive: '⛨', aura: '☀', judgement: '⚖', brawling: '✊', mastery: '⚔', companion: '🐺', wrath: '⚡', key: '♛' };
   const itemIcon = (it) => it.kind === 'gem' ? '💎' : (it.type ? (DATA.WEAPON_TYPES[it.type].offhand ? '🛡' : it.type.includes('2h') || it.type === 'polearm' || it.type === 'staff' ? '🪓' : '⚔') : UI.ICONS[it.slot] || '◆');
 
-  UI.show = function (id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + id)); Input.enabled = id === 'combat'; };
+  UI.show = function (id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + id)); Input.enabled = id === 'combat'; if (id !== 'create' && window.Render3D) Render3D.CharView.stop(); };
   UI.toast = function (msg, color) { const t = document.createElement('div'); t.className = 't'; t.textContent = msg; if (color) t.style.color = color; $('toast').appendChild(t); setTimeout(() => t.remove(), 2600); while ($('toast').children.length > 4) $('toast').firstChild.remove(); };
 
   // ------------------------------------------------------------ modal panels
   UI.open = function (name, data) { panelStack.push({ name, data: data || {} }); UI.renderPanel(); };
   UI.replace = function (name, data) { panelStack.pop(); UI.open(name, data); };
-  UI.close = function () { panelStack.pop(); if (panelStack.length) UI.renderPanel(); else { $('modal').classList.add('hidden'); $('modal-box').innerHTML = ''; if (Game.state === 'combat') Game.resumeCombat(); } };
-  UI.closeAll = function () { panelStack = []; $('modal').classList.add('hidden'); $('modal-box').innerHTML = ''; if (Game.state === 'combat') Game.resumeCombat(); };
+  UI.close = function () { panelStack.pop(); if (panelStack.length) UI.renderPanel(); else { $('modal').classList.add('hidden'); $('modal-box').innerHTML = ''; if (Game.state === 'combat') Game.resumeCombat(); UI.afterRender(); } };
+  UI.closeAll = function () { panelStack = []; $('modal').classList.add('hidden'); $('modal-box').innerHTML = ''; if (Game.state === 'combat') Game.resumeCombat(); UI.afterRender(); };
   UI.refresh = function () { if (panelStack.length) UI.renderPanel(); if (Game.state === 'town') UI.renderTown(); };
   UI.renderPanel = function () {
     const top = panelStack[panelStack.length - 1]; if (!top) return;
@@ -27,6 +27,7 @@
     $('modal-box').innerHTML = fn(top.data);
     const sc = $('modal-box').querySelector('.scroll'); if (sc && top.scroll) sc.scrollTop = top.scroll;
     if (Game.state === 'combat') Game.pauseCombat();
+    UI.afterRender();
   };
   const topbar = (title, extra) => `<div class="topbar"><button class="btn" data-action="close">✕</button><h2>${esc(title)}</h2>${extra || ''}</div>`;
   const matsHtml = (char, keys) => `<div class="matlist">${(keys || Object.keys(char.materials)).filter(k => char.materials[k]).map(k => `<span class="mat" style="color:${DATA.MATERIALS[k] ? DATA.MATERIALS[k].color : '#fff'}">${U.fmtNum(char.materials[k])} ${esc(DATA.MATERIALS[k] ? DATA.MATERIALS[k].name : k)}</span>`).join('')}</div>`;
@@ -47,25 +48,52 @@
   UI.titleOf = (c) => { const t = DATA.TITLES.find(x => x.id === c.cosmetics.title); return t && t.id !== 'none' ? t.name : ''; };
 
   // ------------------------------------------------------------ character creation
-  const createState = { cls: 'barbarian', name: '', skin: 'tan', hair: 'brown', body: 'average' };
+  const createState = { cls: 'barbarian', name: '', skin: 'tan', hair: 'brown', body: 'average', frame: 'broad', hairStyle: 'short', beard: 'none', eyes: 'brown' };
   UI.createState = createState;
+  UI.creatorOptions = function () {
+    const cls = DATA.classes[createState.cls]; const st = DATA.classStart[createState.cls];
+    return { skin: DATA.appearance.skin.find(x => x.id === createState.skin).c, hair: DATA.appearance.hair.find(x => x.id === createState.hair).c, hairStyle: createState.hairStyle, beard: createState.beard, eyes: createState.eyes, body: createState.body, frame: createState.frame, tunic: cls.accent, pants: '#2a2a30', boots: '#4a3a2a', weapon: st.weapon, offhand: st.offhand || null, robe: createState.cls === 'necromancer', armored: createState.cls === 'paladin', scale: 1 };
+  };
   UI.renderCreate = function () {
     const cls = DATA.classes[createState.cls];
+    const optBtns = (k, list, labelFn) => list.map(v => `<button class="btn small ${createState[k] === v ? 'primary' : ''}" data-action="pickapp" data-k="${k}" data-v="${v}">${esc(labelFn ? labelFn(v) : U.cap(v))}</button>`).join('');
     $('screen-create').innerHTML = `
-      ${topbar('Create Character', '').replace('data-action="close"', 'data-action="gomenu"')}
+      ${topbar('Create Character', '<button class="btn small" data-action="randomize">🎲 Randomize</button>').replace('data-action="close"', 'data-action="gomenu"')}
       <div class="scroll pad">
-        <h3>Choose your class</h3>
-        <div class="classcards">${Object.values(DATA.classes).map(c => `<div class="card classcard ${c.id === createState.cls ? 'on' : ''}" data-action="pickclass" data-cls="${c.id}"><div class="swatch" style="background:${c.color}"></div><b>${esc(c.name)}</b><div class="small dim">${esc(c.resource.name)} · ${esc(c.mechanic.name)}</div></div>`).join('')}</div>
-        <div class="card" style="margin-top:10px"><b style="color:${cls.color}">${esc(cls.name)}</b><p class="small">${esc(cls.desc)}</p><p class="small dim"><i>${esc(cls.lore)}</i></p><p class="small">Primary stat: <b>${esc(DATA.STAT_DEFS[cls.mainStat].name)}</b> · Starting skills: ${DATA.classStart[cls.id].skills.map(s => esc(DATA.skillById[s].name)).join(', ')}</p></div>
-        <h3 style="margin-top:12px">Name</h3>
-        <input type="text" id="create-name" maxlength="16" placeholder="Enter a name" value="${esc(createState.name)}" autocomplete="off" autocorrect="off" autocapitalize="words">
-        <h3 style="margin-top:12px">Appearance</h3>
-        <div class="row"><span class="dim small" style="width:60px">Skin</span><div class="swatches">${DATA.appearance.skin.map(s => `<div class="swatch-btn ${s.id === createState.skin ? 'on' : ''}" style="background:${s.c}" data-action="pickapp" data-k="skin" data-v="${s.id}"></div>`).join('')}</div></div>
-        <div class="row" style="margin-top:6px"><span class="dim small" style="width:60px">Hair</span><div class="swatches">${DATA.appearance.hair.map(s => `<div class="swatch-btn ${s.id === createState.hair ? 'on' : ''}" style="background:${s.c}" data-action="pickapp" data-k="hair" data-v="${s.id}"></div>`).join('')}</div></div>
-        <div class="row" style="margin-top:6px"><span class="dim small" style="width:60px">Build</span>${DATA.appearance.body.map(b => `<button class="btn small ${b === createState.body ? 'primary' : ''}" data-action="pickapp" data-k="body" data-v="${b}">${esc(U.cap(b))}</button>`).join('')}</div>
-        <div style="margin-top:20px"><button class="btn primary block" data-action="createchar">Begin your journey</button></div>
+        <div class="createlayout">
+          <div class="viewbox"><canvas class="charview" data-view="create"></canvas><div class="hint">Drag to rotate</div></div>
+          <div>
+            <h3>Class</h3>
+            <div class="classcards">${Object.values(DATA.classes).map(c => `<div class="card classcard ${c.id === createState.cls ? 'on' : ''}" data-action="pickclass" data-cls="${c.id}"><div class="swatch" style="background:${c.color}"></div><b>${esc(c.name)}</b><div class="small dim">${esc(c.resource.name)} · ${esc(c.mechanic.name)}</div></div>`).join('')}</div>
+            <div class="card" style="margin-top:10px"><b style="color:${cls.color}">${esc(cls.name)}</b><p class="small">${esc(cls.desc)}</p><p class="small dim"><i>${esc(cls.lore)}</i></p><p class="small">Primary stat: <b>${esc(DATA.STAT_DEFS[cls.mainStat].name)}</b> · Starting skills: ${DATA.classStart[cls.id].skills.map(s => esc(DATA.skillById[s].name)).join(', ')}</p></div>
+            <h3 style="margin-top:12px">Name</h3>
+            <input type="text" id="create-name" maxlength="16" placeholder="Enter a name" value="${esc(createState.name)}" autocomplete="off" autocorrect="off" autocapitalize="words">
+            <h3 style="margin-top:12px">Appearance</h3>
+            <div class="optrow"><span class="lbl">Skin</span><div class="swatches">${DATA.appearance.skin.map(x => `<div class="swatch-btn ${x.id === createState.skin ? 'on' : ''}" style="background:${x.c}" data-action="pickapp" data-k="skin" data-v="${x.id}"></div>`).join('')}</div></div>
+            <div class="optrow"><span class="lbl">Hair color</span><div class="swatches">${DATA.appearance.hair.map(x => `<div class="swatch-btn ${x.id === createState.hair ? 'on' : ''}" style="background:${x.c}" data-action="pickapp" data-k="hair" data-v="${x.id}"></div>`).join('')}</div></div>
+            <div class="optrow"><span class="lbl">Hair style</span>${optBtns('hairStyle', DATA.appearance.hairStyle)}</div>
+            <div class="optrow"><span class="lbl">Beard</span>${optBtns('beard', DATA.appearance.beard)}</div>
+            <div class="optrow"><span class="lbl">Eyes</span>${optBtns('eyes', DATA.appearance.eyes)}</div>
+            <div class="optrow"><span class="lbl">Build</span>${optBtns('body', DATA.appearance.body)}</div>
+            <div class="optrow"><span class="lbl">Frame</span>${optBtns('frame', DATA.appearance.frame)}</div>
+            <div style="margin-top:20px"><button class="btn primary block" data-action="createchar">Begin your journey</button></div>
+          </div>
+        </div>
       </div>`;
     const inp = $('create-name'); inp.addEventListener('input', () => { createState.name = inp.value; });
+    UI.afterRender();
+  };
+  // Start/refresh 3D character previews for any visible .charview canvas
+  UI.afterRender = function () {
+    if (!window.Render3D || !Render3D.available() || (Game.account && Game.account.settings.renderer === '2d')) return;
+    const cvs = Array.from(document.querySelectorAll('canvas.charview')).filter(c => c.offsetWidth > 0);
+    const cv = cvs[cvs.length - 1]; if (!cv) { Render3D.CharView.stop(); return; }
+    const kind = cv.dataset.view;
+    try {
+      if (kind === 'create') Render3D.CharView.show(cv, UI.creatorOptions());
+      else if (kind === 'mount') Render3D.CharView.show(cv, { char: Game.char, mount: Game.char.mount.current, mountArmor: Game.char.mount.armor, _t: Date.now() });
+      else Render3D.CharView.show(cv, { char: Game.char, _k: JSON.stringify(Game.char.cosmetics) + JSON.stringify(Object.keys(Game.char.equipment).map(k => Game.char.equipment[k] && Game.char.equipment[k].type)) });
+    } catch (e) { console.error(e); }
   };
 
   // ------------------------------------------------------------ town
@@ -141,6 +169,8 @@
     <label class="card row between"><span>Autosave to device</span><button class="btn small ${s.autosave ? 'primary' : ''}" data-action="toggle" data-k="autosave">${s.autosave ? 'On' : 'Off'}</button></label>
     <label class="card row between"><span>Damage numbers</span><button class="btn small ${s.damageNumbers ? 'primary' : ''}" data-action="toggle" data-k="damageNumbers">${s.damageNumbers ? 'On' : 'Off'}</button></label>
     <label class="card row between"><span>Screen shake</span><button class="btn small ${s.screenShake ? 'primary' : ''}" data-action="toggle" data-k="screenShake">${s.screenShake ? 'On' : 'Off'}</button></label>
+    <div class="card"><div class="row between"><span>Graphics quality <span class="small dim">(lower if the iPad gets warm)</span></span><div class="row">${['high', 'medium', 'low'].map(q => `<button class="btn small ${(s.quality || 'high') === q ? 'primary' : ''}" data-action="setquality" data-q="${q}">${U.cap(q)}</button>`).join('')}</div></div></div>
+    <div class="card"><div class="row between"><span>Renderer <span class="small dim">(2D is a fallback for very old devices)</span></span><div class="row"><button class="btn small ${(s.renderer || '3d') === '3d' ? 'primary' : ''}" data-action="setrenderer" data-r="3d">3D</button><button class="btn small ${s.renderer === '2d' ? 'primary' : ''}" data-action="setrenderer" data-r="2d">2D</button></div></div></div>
     <div class="card"><div class="row between"><span>Clear local save (keeps nothing!)</span><button class="btn small danger" data-action="clearsave">Clear</button></div></div>
     <p class="small dim">Add this page to your iPad Home Screen (Share → Add to Home Screen) for full-screen play.</p></div>`; };
   UI.panels.saves = () => `${topbar('Save / Export / Import')}<div class="scroll pad col">
@@ -210,6 +240,7 @@
     const order = ['Core', 'Offense', 'Defense', 'Resistances', 'Recovery', 'Resource', 'Utility', 'Minions', 'Skills', 'Mount'];
     const fmt = (r) => r.kind === 'pct' ? U.fmtPctPlain(r.val) : U.fmtNum(r.val);
     return `${topbar(char.name + ' — Level ' + char.level)}<div class="scroll pad">
+      <div class="viewbox sideview"><canvas class="charview" data-view="char"></canvas></div>
       <div class="row"><div class="avatar" style="width:48px;height:48px;border-radius:50%;background:${DATA.classes[char.cls].color}"></div><div class="grow"><b>${esc(DATA.classes[char.cls].name)}</b> ${esc(UI.titleOf(char))}<div class="small dim">XP ${U.fmtNum(char.xp)} / ${U.fmtNum(Stats.xpToNext(char.level))}${char.level >= 60 ? ' · Paragon ' + char.paragonLevel + ' (' + U.fmtNum(char.paragonXp) + '/' + U.fmtNum(Stats.paragonXpToNext(char.paragonLevel)) + ')' : ''}</div></div></div>
       <div class="bar" style="margin:6px 0"><div class="fill" style="width:${char.level >= 60 ? (char.paragonXp / Stats.paragonXpToNext(char.paragonLevel) * 100) : (char.xp / Stats.xpToNext(char.level) * 100)}%"></div></div>
       <div class="row small dim"><span>Kills ${U.fmtNum(char.record.kills)}</span><span>Elites ${char.record.eliteKills}</span><span>Bosses ${char.record.bossKills}</span><span>Dungeons ${char.record.dungeons}</span><span>Deaths ${char.record.deaths}</span><span>Playtime ${U.fmtTime(char.playtime)}</span></div>
@@ -372,13 +403,13 @@
   };
   UI.stableHtml = function (char) {
     const acc = Game.account;
-    return `<h3>Mounts</h3><p class="small dim">Ride in open-world areas (🐎). Spur for a burst of speed. Dismount onto enemies to knock them down.</p><div class="grid auto">${DATA.MOUNTS.map(m => { const unl = acc.mounts.includes(m.id); const on = char.mount.current === m.id; return `<div class="card ${on ? 'on' : ''} ${unl ? '' : 'areacard locked'}"><div class="row"><div class="sw" style="width:28px;height:28px;border-radius:50%;background:${m.color};border:2px solid ${m.mane}"></div><b>${esc(m.name)}</b></div><p class="small">${esc(m.desc)}</p><div class="small dim">Speed ×${m.speed} · ${m.spurs} spurs</div>${unl ? (on ? '<span class="small green">Selected</span>' : `<button class="btn small primary" data-action="pickmount" data-id="${m.id}">Select</button>`) : m.unlock.type === 'gold' ? `<button class="btn small" data-action="buymount" data-id="${m.id}" ${char.materials.gold >= m.unlock.cost ? '' : 'disabled'}>Buy (${U.fmtNum(m.unlock.cost)}g)</button>` : `<span class="small dim">${m.unlock.type === 'quest' ? 'Quest reward' : m.unlock.type === 'stronghold' ? 'Stronghold reward' : 'Rare drop'}</span>`}</div>`; }).join('')}</div>
+    return `<div class="viewbox" style="height:260px;margin-bottom:8px"><canvas class="charview" data-view="mount"></canvas><div class="hint">Drag to rotate</div></div><h3>Mounts</h3><p class="small dim">Ride in open-world areas (🐎). Spur for a burst of speed. Dismount onto enemies to knock them down.</p><div class="grid auto">${DATA.MOUNTS.map(m => { const unl = acc.mounts.includes(m.id); const on = char.mount.current === m.id; return `<div class="card ${on ? 'on' : ''} ${unl ? '' : 'areacard locked'}"><div class="row"><div class="sw" style="width:28px;height:28px;border-radius:50%;background:${m.color};border:2px solid ${m.mane}"></div><b>${esc(m.name)}</b></div><p class="small">${esc(m.desc)}</p><div class="small dim">Speed ×${m.speed} · ${m.spurs} spurs</div>${unl ? (on ? '<span class="small green">Selected</span>' : `<button class="btn small primary" data-action="pickmount" data-id="${m.id}">Select</button>`) : m.unlock.type === 'gold' ? `<button class="btn small" data-action="buymount" data-id="${m.id}" ${char.materials.gold >= m.unlock.cost ? '' : 'disabled'}>Buy (${U.fmtNum(m.unlock.cost)}g)</button>` : `<span class="small dim">${m.unlock.type === 'quest' ? 'Quest reward' : m.unlock.type === 'stronghold' ? 'Stronghold reward' : 'Rare drop'}</span>`}</div>`; }).join('')}</div>
       <h3>Mount Armor</h3><div class="grid auto">${DATA.MOUNT_ARMOR.map(a => { const unl = a.unlock.type === 'default' || acc.mountArmor.includes(a.id); const on = char.mount.armor === a.id; return `<div class="card ${on ? 'on' : ''} ${unl ? '' : 'areacard locked'}"><b>${esc(a.name)}</b>${a.mods ? '<div class="small">' + a.mods.map(Paragon.modText).join(', ') + '</div>' : ''}${unl ? (on ? '<span class="small green">Equipped</span>' : `<button class="btn small primary" data-action="pickmountarmor" data-id="${a.id}">Equip</button>`) : a.unlock.type === 'gold' ? `<button class="btn small" data-action="buymountarmor" data-id="${a.id}" ${char.materials.gold >= a.unlock.cost ? '' : 'disabled'}>Buy (${U.fmtNum(a.unlock.cost)}g)</button>` : '<span class="small dim">Reward</span>'}</div>`; }).join('')}</div>
       <h3>Trophies</h3><div class="grid auto">${DATA.MOUNT_TROPHIES.map(a => { const unl = a.unlock.type === 'default' || acc.mountTrophies.includes(a.id); const on = char.mount.trophy === a.id; return `<div class="card ${on ? 'on' : ''} ${unl ? '' : 'areacard locked'}"><b>${esc(a.name)}</b>${unl ? (on ? '<span class="small green">Equipped</span>' : `<button class="btn small primary" data-action="pickmounttrophy" data-id="${a.id}">Equip</button>`) : a.unlock.type === 'gold' ? `<button class="btn small" data-action="buymounttrophy" data-id="${a.id}" ${char.materials.gold >= a.unlock.cost ? '' : 'disabled'}>Buy (${U.fmtNum(a.unlock.cost)}g)</button>` : '<span class="small dim">Reward</span>'}</div>`; }).join('')}</div>`;
   };
   UI.wardrobeHtml = function (char, tab) {
     const acc = Game.account;
-    let html = `<div class="row">${['transmog', 'dyes', 'markers', 'titles'].map(t => `<button class="btn tab ${tab === t ? 'on' : ''}" data-action="openpanelreplace" data-panel="vendor" data-role="wardrobe" data-tab="${t}">${esc(U.cap(t))}</button>`).join('')}</div>`;
+    let html = `<div class="viewbox" style="height:260px;margin-bottom:8px"><canvas class="charview" data-view="char"></canvas><div class="hint">Drag to rotate · changes show live</div></div><div class="row">${['transmog', 'dyes', 'markers', 'titles'].map(t => `<button class="btn tab ${tab === t ? 'on' : ''}" data-action="openpanelreplace" data-panel="vendor" data-role="wardrobe" data-tab="${t}">${esc(U.cap(t))}</button>`).join('')}</div>`;
     if (tab === 'transmog') { ['helm', 'chest', 'gloves', 'boots', 'back', 'weapon'].forEach(slot => { html += `<h3>${esc(U.cap(slot))}</h3><div class="grid auto">${DATA.COSMETICS.filter(c => c.slot === slot).map(c => { const unl = Player.cosmeticUnlocked(acc, char, c); const def = DATA.COSMETICS.find(x => x.slot === slot && x.unlock.type === 'default'); const on = (char.cosmetics.equipped[slot] || (def ? def.id : null)) === c.id; return `<div class="card cosmetic ${on ? 'on' : ''} ${unl ? '' : 'areacard locked'}"><div class="sw" style="background:${c.color || '#333'}"></div><div class="grow"><b>${esc(c.name)}</b><div class="small dim">${unl ? '' : c.unlock.type === 'gold' ? U.fmtNum(c.unlock.cost) + ' gold' : c.unlock.type === 'level' ? 'Level ' + c.unlock.level : c.unlock.type === 'stronghold' ? 'Stronghold reward' : 'Quest reward'}</div></div>${unl ? (on ? '<span class="small green">On</span>' : `<button class="btn small primary" data-action="wear" data-slot="${slot}" data-id="${c.id}">Wear</button>`) : c.unlock.type === 'gold' ? `<button class="btn small" data-action="buycos" data-id="${c.id}" ${char.materials.gold >= c.unlock.cost ? '' : 'disabled'}>Buy</button>` : ''}</div>`; }).join('')}</div>`; }); }
     else if (tab === 'dyes') html += `<div class="grid auto">${DATA.DYES.map(d => { const unl = d.unlock.type === 'default' || acc.cosmetics.includes('dye:' + d.id) || (d.unlock.type === 'level' && char.level >= d.unlock.level); const on = char.cosmetics.dye === d.id; return `<div class="card cosmetic ${on ? 'on' : ''} ${unl ? '' : 'areacard locked'}"><div class="sw" style="background:${d.color || 'transparent'}"></div><div class="grow"><b>${esc(d.name)}</b><div class="small dim">${unl ? '' : d.unlock.type === 'gold' ? U.fmtNum(d.unlock.cost) + ' gold' : 'Level ' + d.unlock.level}</div></div>${unl ? (on ? '<span class="small green">On</span>' : `<button class="btn small primary" data-action="dye" data-id="${d.id}">Apply</button>`) : d.unlock.type === 'gold' ? `<button class="btn small" data-action="buydye" data-id="${d.id}" ${char.materials.gold >= d.unlock.cost ? '' : 'disabled'}>Buy</button>` : ''}</div>`; }).join('')}</div>`;
     else if (tab === 'markers') html += `<div class="grid auto">${DATA.MARKERS.map(d => { const unl = d.unlock.type === 'default' || acc.cosmetics.includes('marker:' + d.id) || (d.unlock.type === 'level' && char.level >= d.unlock.level) || (d.unlock.type === 'quest' && char.quests.done[d.unlock.quest]); const on = char.cosmetics.marker === d.id; return `<div class="card cosmetic ${on ? 'on' : ''} ${unl ? '' : 'areacard locked'}"><div class="sw" style="display:flex;align-items:center;justify-content:center">${d.glyph || ''}</div><div class="grow"><b>${esc(d.name)}</b><div class="small dim">${unl ? '' : d.unlock.type === 'gold' ? U.fmtNum(d.unlock.cost) + ' gold' : d.unlock.type === 'level' ? 'Level ' + d.unlock.level : 'Quest: ' + esc(DATA.questById[d.unlock.quest].name)}</div></div>${unl ? (on ? '<span class="small green">On</span>' : `<button class="btn small primary" data-action="marker" data-id="${d.id}">Use</button>`) : d.unlock.type === 'gold' ? `<button class="btn small" data-action="buymarker" data-id="${d.id}" ${char.materials.gold >= d.unlock.cost ? '' : 'disabled'}>Buy</button>` : ''}</div>`; }).join('')}</div>`;
@@ -444,7 +475,10 @@
     gomenu() { UI.closeAll(); Game.goMenu(); }, gocreate() { Game.goCreate(); }, gotown() { UI.closeAll(); Game.goTown(); }, gomap() { Game.goMap(); },
     selectchar(d) { Game.selectChar(d.id); }, deletechar(d) { if (confirm('Delete this character permanently?')) Game.deleteChar(d.id); },
     pickclass(d) { createState.cls = d.cls; UI.renderCreate(); }, pickapp(d) { createState[d.k] = d.v; UI.renderCreate(); },
-    createchar() { const name = ($('create-name').value || '').trim(); if (!name) { UI.toast('Enter a name', '#f88'); return; } Game.createChar(name, createState.cls, { skin: createState.skin, hair: createState.hair, body: createState.body }); },
+    randomize() { const A = DATA.appearance; createState.skin = U.pick(A.skin).id; createState.hair = U.pick(A.hair).id; createState.hairStyle = U.pick(A.hairStyle); createState.beard = U.pick(A.beard); createState.eyes = U.pick(A.eyes); createState.body = U.pick(A.body); createState.frame = U.pick(A.frame); UI.renderCreate(); },
+    setquality(d) { Game.account.settings.quality = d.q; if (window.Render3D) Render3D.setQuality(d.q); Game.save(); UI.refresh(); },
+    setrenderer(d) { Game.account.settings.renderer = d.r; Game.save(true); UI.toast('Reloading to switch renderer…'); setTimeout(() => location.reload(), 400); },
+    createchar() { const name = ($('create-name').value || '').trim(); if (!name) { UI.toast('Enter a name', '#f88'); return; } Game.createChar(name, createState.cls, { skin: createState.skin, hair: createState.hair, body: createState.body, frame: createState.frame, hairStyle: createState.hairStyle, beard: createState.beard, eyes: createState.eyes }); },
     pickzone(d) { UI.mapZone = d.id; UI.renderMap(); }, enterarea(d) { Game.enterArea(d.id); }, travel(d) { Game.goTown(d.town); UI.closeAll(); UI.toast('Traveled to ' + DATA.TOWNS[d.town].name); },
     setdiff(d) { Game.char.difficulty = d.id; UI.toast('Difficulty: ' + DATA.diffById[d.id].name); UI.close(); UI.renderTown(); Game.save(); },
     npc(d) { UI.open('npc', { id: d.id }); },

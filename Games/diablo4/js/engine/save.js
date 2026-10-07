@@ -6,7 +6,7 @@
   Save.KEY = 'sanctuary_save_v1';
 
   Save.newAccount = function () {
-    return { version: Save.VERSION, characters: [], stash: [], cosmetics: [], mounts: [], mountArmor: [], mountTrophies: [], codex: {}, settings: { autosave: true, damageNumbers: true, screenShake: true, leftHanded: false, hudScale: 1 }, selected: null, created: Date.now() };
+    return { version: Save.VERSION, characters: [], stash: [], cosmetics: [], mounts: [], mountArmor: [], mountTrophies: [], codex: {}, settings: { autosave: true, damageNumbers: true, screenShake: true, leftHanded: false, hudScale: 1, quality: 'high', renderer: '3d' }, selected: null, created: Date.now() };
   };
 
   // Strip runtime-only data before serializing

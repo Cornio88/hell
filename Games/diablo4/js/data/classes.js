@@ -221,6 +221,10 @@ window.DATA = window.DATA || {};
   DATA.appearance = {
     skin: [{ id: 'fair', c: '#f1d2b6' }, { id: 'tan', c: '#d9a877' }, { id: 'olive', c: '#b58a5a' }, { id: 'brown', c: '#8a5a3a' }, { id: 'dark', c: '#5a3a28' }, { id: 'ashen', c: '#b9b2b0' }],
     hair: [{ id: 'black', c: '#1b1b1b' }, { id: 'brown', c: '#5a3a1a' }, { id: 'blonde', c: '#e2c278' }, { id: 'red', c: '#b5401a' }, { id: 'white', c: '#e8e8e8' }, { id: 'silver', c: '#a0a8b8' }],
-    body: ['lean', 'average', 'heavy']
+    body: ['lean', 'average', 'heavy'],
+    frame: ['broad', 'slender'],
+    hairStyle: ['short', 'long', 'bald', 'mohawk', 'braid', 'bun', 'wild'],
+    beard: ['none', 'stubble', 'goatee', 'full'],
+    eyes: ['brown', 'blue', 'green', 'amber', 'gray']
   };
 })();
