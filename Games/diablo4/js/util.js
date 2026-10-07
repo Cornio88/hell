@@ -1,5 +1,6 @@
 /* Sanctuary — utility helpers (global namespace: U) */
 (function () {
+  window.BUILD = '3'; // bump with the ?v= tags in index.html on every release
   'use strict';
   const U = {};
 

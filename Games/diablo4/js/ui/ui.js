@@ -43,7 +43,8 @@
         <div class="card charcard" data-action="gocreate" style="border-style:dashed;justify-content:center"><b>+ New Character</b></div>
       </div>
       <div class="row" style="margin-top:16px;justify-content:center"><button class="btn" data-action="openpanel" data-panel="saves">💾 Save / Load</button><button class="btn" data-action="openpanel" data-panel="help">? How to Play</button><button class="btn" data-action="openpanel" data-panel="settings">⚙ Settings</button></div>
-      <div class="dim small center" style="margin-top:12px">Autosaves to this device. Export a file to keep your progress safe or move it to another device.</div>`;
+      <div class="dim small center" style="margin-top:12px">Autosaves to this device. Export a file to keep your progress safe or move it to another device.</div>
+      <div class="dim small center" style="margin-top:6px;opacity:.6">Build ${window.BUILD || '?'}</div>`;
   };
   UI.titleOf = (c) => { const t = DATA.TITLES.find(x => x.id === c.cosmetics.title); return t && t.id !== 'none' ? t.name : ''; };
 
