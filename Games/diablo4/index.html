@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sanctuary — Diablo IV Tribute</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Sanctuary">
+  <meta name="theme-color" content="#0b0b0f">
+  <meta name="description" content="A browser-based action RPG tribute to Diablo IV: four classes, skill trees, loot, paragon, quests, towns, mounts and cosmetics. Runs on iPad.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Main menu -->
+    <section id="screen-menu" class="screen"></section>
+    <!-- Character creation -->
+    <section id="screen-create" class="screen"></section>
+    <!-- Town -->
+    <section id="screen-town" class="screen"></section>
+    <!-- World map -->
+    <section id="screen-map" class="screen"></section>
+    <!-- Combat -->
+    <section id="screen-combat" class="screen">
+      <canvas id="game"></canvas>
+      <div id="hud">
+        <div id="hud-top">
+          <div id="hud-area"></div>
+          <div id="hud-objective"></div>
+          <div id="hud-log"></div>
+        </div>
+        <div id="hud-boss"><div class="bossname"></div><div class="bossbar"><div class="fill"></div></div></div>
+        <div id="hud-left">
+          <div class="orb life"><div class="fill"></div><div class="fortify"></div><div class="label"></div></div>
+          <div id="hud-potion" class="roundbtn" data-action="potion"><span class="ico">⚗</span><span class="count"></span></div>
+          <div id="hud-xp"><div class="fill"></div></div>
+        </div>
+        <div id="hud-right">
+          <div class="orb res"><div class="fill"></div><div class="label"></div></div>
+          <div id="hud-skills"></div>
+          <div id="hud-actions">
+            <div id="hud-evade" class="roundbtn" data-action="evade"><span class="ico">↯</span><span class="count"></span></div>
+            <div id="hud-mount" class="roundbtn" data-action="mount"><span class="ico">🐎</span></div>
+            <div id="hud-portal" class="roundbtn" data-action="portal"><span class="ico">⌂</span></div>
+            <div id="hud-menu" class="roundbtn" data-action="openpanel" data-panel="pause"><span class="ico">☰</span></div>
+          </div>
+        </div>
+        <div id="hud-buffs"></div>
+        <div id="hud-death"><h2>You have died</h2><p id="hud-death-text"></p><div class="row"><button class="btn primary" data-action="revive">Revive</button><button class="btn" data-action="leave" data-how="death">Return to Town</button></div></div>
+      </div>
+    </section>
+    <!-- Modal panels -->
+    <div id="modal" class="hidden"><div id="modal-box"></div></div>
+    <div id="toast"></div>
+    <input type="file" id="import-file" accept=".json,application/json,text/plain" style="display:none">
+  </div>
+  <script src="js/util.js"></script>
+  <script src="js/data/classes.js"></script>
+  <script src="js/data/skills.js"></script>
+  <script src="js/data/items.js"></script>
+  <script src="js/data/enemies.js"></script>
+  <script src="js/data/world.js"></script>
+  <script src="js/engine/stats.js"></script>
+  <script src="js/engine/items.js"></script>
+  <script src="js/engine/player.js"></script>
+  <script src="js/engine/combat.js"></script>
+  <script src="js/engine/combat2.js"></script>
+  <script src="js/engine/render.js"></script>
+  <script src="js/engine/save.js"></script>
+  <script src="js/ui/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

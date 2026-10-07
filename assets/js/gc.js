@@ -4,6 +4,7 @@ const gameData = [
     { id: 1, title: "Made a recommendation? Check both apps and games.", link: "/games/2048/" },
     { id: 1, title: "I'M NOT ADDING FORNITE", link: "/games/2048/" },
 
+    { id: 0, title: "Diablo IV: Sanctuary (ARPG)", link: "/games/diablo4/" },
     { id: 0, title: "1v1 lol", link: "/games/1v1lol" },
     { id: 2, title: "1", link: "/games/1" },
     { id: 0, title: "10 Minutes Till Dawn", link: "/games/10-minutes-till-dawn" },
