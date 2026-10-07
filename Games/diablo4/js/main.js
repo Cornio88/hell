@@ -6,7 +6,10 @@
   Game.init = function () {
     Game.account = Save.fromLocal() || Save.newAccount();
     UI.init();
-    Render.init(document.getElementById('game'));
+    const use3d = window.Render3D && Render3D.available() && Game.account.settings.renderer !== '2d';
+    Game.R = use3d ? Render3D : Render;
+    try { Game.R.init(document.getElementById('game'), document.getElementById('overlay')); } catch (e) { console.error('3D init failed, falling back to 2D', e); Game.R = Render; Render.init(document.getElementById('game')); }
+    if (Game.R === Render3D) Render3D.setQuality(Game.account.settings.quality || 'high'); else document.getElementById('overlay').style.display = 'none';
     Input.init(document.getElementById('game'), Game.onInput);
     Game.goMenu();
     window.addEventListener('beforeunload', () => Game.save());
@@ -105,7 +108,7 @@
       onEnd: (result) => { Game.finishCombat(result); }
     } });
     UI.show('combat');
-    Render.resize();
+    Game.R.resize();
     Game.paused = false;
     Game.startLoop();
     Combat.log('Entered ' + area.name + ' (level ' + level + ')', '#ffe55c');
@@ -171,7 +174,7 @@
     }
     if (!Game.account.settings.screenShake) S.shake = 0;
     if (!Game.account.settings.damageNumbers) S.texts.length = 0;
-    Render.draw(S, { joystick: Input.joystick });
+    Game.R.draw(S, { joystick: Input.joystick });
     Game.hudT += dt; if (Game.hudT > 0.08) { Game.hudT = 0; UI.hud(S); }
   };
 

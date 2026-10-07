@@ -23,12 +23,64 @@
     if (opts && opts.summonedBy) { e.summonedBy = opts.summonedBy; e.hp = e.maxHp = hp * 0.6; }
     return e;
   }
+  // ------------------------------------------------------------- navigation grid (flow field toward the player)
+  function buildNav() {
+    const s = S(); const cell = 1; const cols = Math.ceil(s.w / cell), rows = Math.ceil(s.h / cell);
+    const blocked = new Uint8Array(cols * rows);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) blocked[r * cols + c] = Layout.blockedAt(s.obstacles, (c + 0.5) * cell, (r + 0.5) * cell, 0.45) ? 1 : 0;
+    s.nav = { cell, cols, rows, blocked, dist: new Int16Array(cols * rows).fill(-1), t: -9, queue: new Int32Array(cols * rows) };
+  }
+  function updateNav() {
+    const s = S(), n = s.nav; if (!n) return; n.t = s.t;
+    const p = s.player; const { cols, rows, blocked, dist, queue } = n; dist.fill(-1);
+    const sc = U.clamp(Math.floor(p.x / n.cell), 0, cols - 1), sr = U.clamp(Math.floor(p.y / n.cell), 0, rows - 1);
+    let head = 0, tail = 0; const start = sr * cols + sc; dist[start] = 0; queue[tail++] = start;
+    while (head < tail) {
+      const cur = queue[head++]; const cr = Math.floor(cur / cols), cc = cur - cr * cols; const d = dist[cur];
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue; const nr = cr + dr, nc = cc + dc; if (nr < 0 || nc < 0 || nr >= rows || nc >= cols) continue;
+        const ni = nr * cols + nc; if (blocked[ni] || dist[ni] >= 0) continue;
+        if (dr && dc && (blocked[cr * cols + nc] || blocked[nr * cols + cc])) continue; // no corner cutting
+        dist[ni] = d + 1; queue[tail++] = ni;
+      }
+    }
+  }
+  function navDist(x, y) { const n = S().nav; if (!n) return 0; const c = U.clamp(Math.floor(x / n.cell), 0, n.cols - 1), r = U.clamp(Math.floor(y / n.cell), 0, n.rows - 1); return n.dist[r * n.cols + c]; }
+  function navAngle(e) {
+    const n = S().nav; if (!n) return null;
+    const c = U.clamp(Math.floor(e.x / n.cell), 0, n.cols - 1), r = U.clamp(Math.floor(e.y / n.cell), 0, n.rows - 1);
+    let best = -1, bd = 1e9, bx = 0, by = 0; const here = n.dist[r * n.cols + c];
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const nr = r + dr, nc = c + dc; if (nr < 0 || nc < 0 || nr >= n.rows || nc >= n.cols) continue; const ni = nr * n.cols + nc; const d = n.dist[ni]; if (d < 0 || n.blocked[ni]) continue; if (dr && dc && (n.blocked[r * n.cols + nc] || n.blocked[nr * n.cols + c])) continue; if (d < bd) { bd = d; best = ni; bx = (nc + 0.5) * n.cell; by = (nr + 0.5) * n.cell; } }
+    if (best < 0 || (here >= 0 && bd >= here && here > 0)) return null;
+    return U.angleTo(e.x, e.y, bx, by);
+  }
+  function hasLOS(a, b) { const s = S(); const d = U.dist(a.x, a.y, b.x, b.y); const steps = Math.ceil(d / 0.6); for (let i = 1; i < steps; i++) { const t = i / steps; if (Layout.pointInside(s.obstacles, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)) return false; } return true; }
+  C.hasLOS = hasLOS;
+  // Nearest walkable cell centre to (x, y); when the nav grid exists it must also be reachable from the player.
+  function freeSpotNear(x, y, maxR) {
+    const s = S(); maxR = maxR || 8;
+    const ok = (px, py) => px > 1 && py > 1 && px < s.w - 1 && py < s.h - 1 && !Layout.blockedAt(s.obstacles, px, py, 0.6) && (!s.nav || navDist(px, py) >= 0);
+    if (ok(x, y)) return { x, y };
+    let best = null, bd = 1e9;
+    for (let dy = -maxR; dy <= maxR; dy++) for (let dx = -maxR; dx <= maxR; dx++) { const px = Math.floor(x) + dx + 0.5, py = Math.floor(y) + dy + 0.5; const d = dx * dx + dy * dy; if (d >= bd || !ok(px, py)) continue; bd = d; best = { x: px, y: py }; }
+    return best || { x, y };
+  }
   function spawnPoint(nearPlayer) {
+    const s = S(), p = s.player;
+    if (!nearPlayer && s.nav) {
+      // prefer reachable cells 8-16 path steps away from the player
+      for (let i = 0; i < 40; i++) { const a = Math.random() * Math.PI * 2, d = 9 + Math.random() * 8; const x = p.x + Math.cos(a) * d, y = p.y + Math.sin(a) * d; if (x < 1 || y < 1 || x > s.w - 1 || y > s.h - 1) continue; const nd = navDist(x, y); if (nd >= 8 && nd <= 22 && !Layout.blockedAt(s.obstacles, x, y, 0.8)) return { x, y }; }
+      // fallback: any reachable cell within range
+      for (let i = 0; i < 60; i++) { const x = 1 + Math.random() * (s.w - 2), y = 1 + Math.random() * (s.h - 2); const nd = navDist(x, y); if (nd >= 6 && nd <= 30 && !Layout.blockedAt(s.obstacles, x, y, 0.8)) return { x, y }; }
+    }
+    return spawnPointLegacy(nearPlayer);
+  }
+  function spawnPointLegacy(nearPlayer) {
     const s = S(), p = s.player;
     for (let i = 0; i < 20; i++) {
       const a = Math.random() * Math.PI * 2, d = nearPlayer ? 3 + Math.random() * 3 : 10 + Math.random() * 6;
       const x = p.x + Math.cos(a) * d, y = p.y + Math.sin(a) * d;
-      if (x > 1 && y > 1 && x < s.w - 1 && y < s.h - 1 && !s.obstacles.some(o => U.dist(o.x, o.y, x, y) < o.r + 0.8)) return { x, y };
+      if (x > 1 && y > 1 && x < s.w - 1 && y < s.h - 1 && !Layout.blockedAt(s.obstacles, x, y, 0.8)) return { x, y };
     }
     return { x: U.clamp(p.x + 8, 1, s.w - 1), y: U.clamp(p.y - 8, 1, s.h - 1) };
   }
@@ -42,7 +94,8 @@
     packDefs.forEach((def, i) => {
       const ox = (Math.random() - 0.5) * 3, oy = (Math.random() - 0.5) * 3;
       const rank = i === 0 && eliteRank ? eliteRank : 'normal';
-      const e = makeEnemy(def, U.clamp(pt.x + ox, 1, s.w - 1), U.clamp(pt.y + oy, 1, s.h - 1), s.level, rank);
+      let ex = U.clamp(pt.x + ox, 1, s.w - 1), ey = U.clamp(pt.y + oy, 1, s.h - 1); if (Layout.blockedAt(s.obstacles, ex, ey, 0.6)) { ex = pt.x; ey = pt.y; }
+      const e = makeEnemy(def, ex, ey, s.level, rank);
       if (rank === 'elite' || rank === 'superunique') { for (let k = 1; k < size; k++) { } }
       s.enemies.push(e); s.spawned++;
     });
@@ -52,7 +105,8 @@
   function spawnBoss(def) {
     const s = S();
     const lvl = Math.max(s.level, def.level);
-    const e = makeEnemy(Object.assign({}, def, { abilities: def.abilities }), s.w / 2, s.h / 2 - 2, lvl, 'boss');
+    const pt = freeSpotNear(s.w / 2, s.h / 2 - 2, 6);
+    const e = makeEnemy(Object.assign({}, def, { abilities: def.abilities }), pt.x, pt.y, lvl, 'boss');
     e.maxHp = e.hp = Stats.enemyBaseHp(lvl) * def.hp * s.diff.hp;
     e.dmg = Stats.enemyBaseDmg(lvl) * def.dmg * s.diff.dmg;
     e.boss = def; e.name = def.name; e.r = def.r; e.speed = def.speed; e.resist = Object.assign({}, def.resist); e.phases = def.phases.slice();
@@ -129,6 +183,7 @@
     const s = S(), p = s.player, sctx = s.sctx, char = s.char;
     e.dead = true; e.deathT = 0;
     addParticles(e.x, e.y, 14, e.color, 4, 0.5, 0.14);
+    if (s.bloodDecals.length > 40) s.bloodDecals.shift(); s.bloodDecals.push({ x: e.x + (Math.random() - 0.5) * 0.5, y: e.y + (Math.random() - 0.5) * 0.5, r: 0.5 + e.r * 0.8, t: 0, color: e.def.shape === 'skull' || e.def.shape === 'construct' ? '#4a4a40' : e.def.shape === 'ghost' ? null : '#5a0a0a' });
     const rank = e.elite.rank;
     s.kills++; char.record.kills++;
     if (rank !== 'normal' && rank !== 'boss') { s.eliteKills++; char.record.eliteKills++; }
@@ -640,7 +695,7 @@
     // portal
     if (p.portal > 0) { p.portal -= dt; if (p.portal <= 0) { p.portal = 0; C.leave('portal'); return; } }
     // auto-aim target refresh
-    const t = nearestEnemy(p.x, p.y, 12); s.input.aim = t;
+    const t = nearestEnemy(p.x, p.y, 12, e => hasLOS(p, e)) || nearestEnemy(p.x, p.y, 12); s.input.aim = t;
     // pickups
     for (const o of s.orbs) { if (U.dist(o.x, o.y, p.x, p.y) < 1.2) { o.t = 0; heal(p, p.maxHp * 0.15 * (1 + (sctx.flags.orb_heal || 0))); if (sctx.flags.potent_blood && p.hp >= p.maxHp) gainResource(p, sctx.flags.potent_blood, true); p.bloodOrbs++; fireTriggers('blood_orb', {}); if (sctx.flags.blood_artisan && p.bloodOrbs % sctx.flags.blood_artisan === 0) { const r2 = sctx.skills.bone_spirit || Stats.resolveSkill(sctx, DATA.skillById.bone_spirit); runEffect(r2, Object.assign({}, r2.eff, { consumesAllResource: false }), aimFor(r2), { count: 0 }); } } }
     for (const dr of s.drops) { if (dr.taken) continue; const pr = dr.kind === 'gold' || dr.kind === 'material' ? 2.2 * d.pickupRadius : 1.1; if (U.dist(dr.x, dr.y, p.x, p.y) < pr) pickup(dr); }
@@ -719,7 +774,7 @@
       // heal (bonded in essence)
       if (sctx.flags.minion_heal) { m.healT = (m.healT || 0) + dt; if (m.healT >= 5) { m.healT = 0; m.hp = Math.min(m.maxHp, m.hp + m.maxHp * sctx.flags.minion_heal); } }
       const leash = 11;
-      let target = m.forceTarget && !m.forceTarget.dead ? m.forceTarget : nearestEnemy(m.x, m.y, 9, e => dist(e, p) < leash + 4);
+      let target = m.forceTarget && !m.forceTarget.dead ? m.forceTarget : nearestEnemy(m.x, m.y, 9, e => dist(e, p) < leash + 4 && hasLOS(m, e));
       if (dist(m, p) > leash + 2) { m.x = p.x + (Math.random() - 0.5) * 2; m.y = p.y + (Math.random() - 0.5) * 2; }
       const atkSpeed = sctx.d.minionAttackSpeed * (sctx.flags.inspiring_leader && p.hp >= p.maxHp * 0.8 ? 1.04 : 1) * (p.kalans ? (S().minions.length >= 7 ? 1.3 : 1.15) : 1);
       m.cd -= dt * atkSpeed;
@@ -761,6 +816,7 @@
     const s = S(), p = s.player;
     for (const e of s.enemies) {
       if (e.dead) { e.deathT += dt; continue; }
+      if (e.hp <= 0 && !e.invuln) { killEnemy(e, { src: p }); continue; }
       if (e.hitFlash > 0) e.hitFlash -= dt;
       if (e.hitStun > 0) e.hitStun -= dt;
       if (e.shoutWeakT > 0) { e.shoutWeakT -= dt; if (e.shoutWeakT <= 0) e.shoutWeak = 0; }
@@ -792,6 +848,10 @@
       const beh = e.def.behavior;
       const dirTo = U.angleTo(e.x, e.y, target.x, target.y);
       e.facing = dirTo;
+      ai.losT = (ai.losT || 0) - dt; if (ai.losT <= 0) { ai.losT = 0.3; ai.los = hasLOS(e, target); }
+      const navA = !ai.los ? navAngle(e) : null; // flow field is built from the player; minions stay close to them, so it guides minion-chasers too
+      const moveDir = navA !== null ? navA : dirTo;
+      ai.navSteer = navA !== null;
       // abilities
       Object.keys(ai.abilityCds).forEach(k => { ai.abilityCds[k] -= dt; });
       ai.globalCd = (ai.globalCd || 0) - dt;
@@ -804,6 +864,7 @@
           if ((ai.abilityCds[key] || 0) > 0) continue;
           const want = a.kind === 'summon' ? e.summoned < (a.max || 4) : a.kind === 'heal' ? (a.self ? e.hp < e.maxHp * 0.5 : S().enemies.some(o => !o.dead && o !== e && o.hp < o.maxHp * 0.7 && dist(o, e) < a.radius)) : a.kind === 'charge' ? dd > 2 && dd < a.dist : a.kind === 'blink' ? dd > 4 : a.kind === 'leap' ? dd > 2 && dd < a.dist : a.kind === 'walls' ? dd < 6 : a.kind === 'hook' ? dd > 3 && dd < a.range : a.kind === 'burrow' ? true : (a.kind === 'proj' || a.kind === 'mortar' || a.kind === 'volley' || a.kind === 'aoe' || a.kind === 'pool' || a.kind === 'cone') ? dd < (a.range || e.range || 9) + 2 : a.kind === 'nova' ? dd < (a.radius || 3) + 1 : a.kind === 'buff' || a.kind === 'shield' ? true : dd < 8;
           if (!want) continue;
+          if (!ai.los && !['summon', 'heal', 'buff', 'shield', 'blink', 'burrow', 'walls'].includes(a.kind)) continue;
           if (a.kind === 'proj' && e.def.behavior !== 'ranged' && e.def.behavior !== 'caster' && e.def.behavior !== 'summoner' && !e.boss && dd > (a.range || 9)) continue;
           ai.abilityCds[key] = a.cd || 3; ai.globalCd = 0.5 + Math.random() * 0.4;
           useAbility(e, a, target, dirTo, dd);
@@ -815,17 +876,18 @@
       const ranged = beh === 'ranged' || beh === 'caster' || beh === 'summoner';
       const range = ranged ? (e.def.range || 8) : e.range;
       if (ranged) {
-        if (dd > range * 0.85) { moveEntity(e, dirTo, speed, dt); }
+        if (!ai.los) { moveEntity(e, moveDir, speed, dt); }
+        else if (dd > range * 0.85) { moveEntity(e, dirTo, speed, dt); }
         else if (dd < range * 0.4) { moveEntity(e, dirTo + Math.PI, speed * 0.7, dt); }
         else { moveEntity(e, dirTo + Math.PI / 2 * ai.strafe, speed * 0.4, dt); if (Math.random() < dt * 0.3) ai.strafe *= -1; }
         if (!e.abilities.some(a => a.kind === 'proj') && dd <= e.range + 0.2) basicAttack(e, target, dt);
       } else if (beh === 'exploder') {
-        if (dd > 0.9) moveEntity(e, dirTo, speed * 1.15, dt);
+        if (dd > 0.9) moveEntity(e, moveDir, speed * 1.15, dt);
         if (dd <= 1.1 && ai.fuse < 0) { ai.fuse = 0.6; e.ai.telegraphExplode = true; }
         if (ai.fuse >= 0) { ai.fuse -= dt; if (ai.fuse <= 0) { const a = e.abilities.find(x => x.kind === 'explode'); e.dead = true; e.deathT = 0; e.noLoot = true; ai.fuse = 99; explodeEnemy(e, a); s.kills++; if (s.hooks.onKill) s.hooks.onKill(e); } }
       } else {
-        if (dd > 0.15) moveEntity(e, dirTo, speed, dt);
-        if (dd <= e.range + 0.3 && !e.st.daze) basicAttack(e, target, dt);
+        if (dd > 0.15) moveEntity(e, moveDir, speed, dt);
+        if (dd <= e.range + 0.3 && !e.st.daze && ai.los) basicAttack(e, target, dt);
       }
       // separation
       for (const o of s.enemies) { if (o === e || o.dead || o.hidden) continue; const dx = e.x - o.x, dy = e.y - o.y; const d2 = dx * dx + dy * dy; const min = (e.r + o.r) * 0.9; if (d2 < min * min && d2 > 0.0001) { const d1 = Math.sqrt(d2); const push = (min - d1) * 0.5; e.x += dx / d1 * push; e.y += dy / d1 * push; } }
@@ -835,9 +897,9 @@
       if (e.elite.affixes.some(a => a.enrage)) { const a = e.elite.affixes.find(x => x.enrage); e.enraged = Math.max(e.enraged, a.enrage * (1 - e.hp / e.maxHp)); }
     }
     // remove dead after animation; summons of dead summoners stay
-    s.enemies = s.enemies.filter(e => !e.dead || e.deathT < 0.6);
+    s.enemies = s.enemies.filter(e => !e.dead || e.deathT < 4);
   }
-  function moveEntity(e, dir, speed, dt) { const ai = e.ai; let d = dir; if (e.blocked) { ai.avoid = (ai.avoid || 0.5) ; d = dir + (ai.strafe || 1) * 0.9; } e.blocked = false; e.x += Math.cos(d) * speed * dt; e.y += Math.sin(d) * speed * dt; }
+  function moveEntity(e, dir, speed, dt) { const ai = e.ai; let d = dir; if (e.blocked && !(ai && ai.navSteer)) { d = dir + (ai.strafe || 1) * 0.9; } e.blocked = false; e.x += Math.cos(d) * speed * dt; e.y += Math.sin(d) * speed * dt; }
   function basicAttack(e, target, dt) {
     const ai = e.ai;
     ai.windup = (ai.windup || 0);
@@ -915,7 +977,7 @@
       if (pr.spectre && pr.returning) { const want = U.angleTo(pr.x, pr.y, p.x, p.y); pr.vx = Math.cos(want) * pr.speed; pr.vy = Math.sin(want) * pr.speed; if (U.dist(pr.x, pr.y, p.x, p.y) < 0.6) { pr.alive = false; continue; } }
       const step = pr.speed * dt; pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.traveled += step;
       if (pr.x < 0 || pr.y < 0 || pr.x > s.w || pr.y > s.h) { pr.alive = false; onProjExpire(pr); continue; }
-      if (s.obstacles.some(o => U.dist(o.x, o.y, pr.x, pr.y) < o.r && !pr.flying && !pr.orbit) && !pr.spectre) { pr.alive = false; onProjExpire(pr); continue; }
+      if (!pr.flying && !pr.orbit && !pr.spectre && Layout.pointInside(s.obstacles, pr.x, pr.y)) { pr.alive = false; onProjExpire(pr); continue; }
       if (pr.team === 0) {
         if (pr.interval) { pr.tickT += dt; if (pr.tickT >= pr.interval) { pr.tickT = 0; const list = enemiesIn(pr.x, pr.y, pr.radius); if (list.length) { const extra = {}; if (pr.critRamp) { extra.critBonus = pr.critRamp * (pr.critHits || 0); pr.critHits = (pr.critHits || 0) + list.length; } hitList(list, pr.res, pr.cast, extra); list.forEach(e => { if (pr.knock && e.elite.rank !== 'boss') { const a = Math.atan2(pr.vy, pr.vx); e.kb = { vx: Math.cos(a) * 5, vy: Math.sin(a) * 5, t: 0.2 }; } }); } } }
         else {
@@ -1010,9 +1072,9 @@
   function spawnGoblin() { const s = S(); const def = Object.assign({}, DATA.enemyById.fallen, { id: 'goblin', name: 'Treasure Goblin', hp: 3, dmg: 0.2, speed: 6.5, color: '#ffd76a', shape: 'imp', abilities: [], xp: 5 }); const pt = spawnPoint(false); const e = makeEnemy(def, pt.x, pt.y, s.level, 'champion'); e.elite.affixes = []; e.goblin = true; e.name = 'Treasure Goblin'; s.enemies.push(e); log('A Treasure Goblin appears!', '#ffd76a'); }
   function onCleared() {
     const s = S(), p = s.player, char = s.char;
-    if (s.mode === 'dungeon' && s.floor < s.maxFloors) { s.exit = { x: s.w / 2, y: 4 }; log('Floor cleared! Find the stairs.', '#ffe55c'); return; }
+    if (s.mode === 'dungeon' && s.floor < s.maxFloors) { if (s.nav) updateNav(); s.exit = freeSpotNear(s.w / 2, 4, 10); log('Floor cleared! Find the stairs.', '#ffe55c'); return; }
     // final clear: chest + rewards
-    s.chest = { x: p.x + 2, y: p.y - 2, opened: false };
+    if (s.nav) updateNav(); s.chest = Object.assign(freeSpotNear(p.x + 2, p.y - 2, 6), { opened: false });
     if (s.mode === 'event') { log('Event complete! Claim the chest.', '#ffe55c'); }
     else log('Area cleared! Claim your reward.', '#ffe55c');
     if (s.mode === 'dungeon' || s.mode === 'stronghold' || s.mode === 'cellar' || s.mode === 'event') { if (s.hooks.onCleared) s.hooks.onCleared(s.mode); }
@@ -1032,7 +1094,7 @@
   }
   function nextFloor() {
     const s = S();
-    s.floor++; s.exit = null; s.enemies = []; s.projectiles = []; s.zones = []; s.corpses = []; s.walls = []; s.beams = [];
+    s.floor++; s.exit = null; s.enemies = []; s.projectiles = []; s.zones = []; s.corpses = []; s.walls = []; s.beams = []; s.nav = null;
     _.buildMap(); _.setupMode();
     s.minions.forEach(m => { m.x = s.player.x; m.y = s.player.y; });
     log('Floor ' + s.floor + ' of ' + s.maxFloors, '#ffe55c');
@@ -1045,6 +1107,7 @@
     const s = S(); if (!s || s.result) return;
     dt = Math.min(dt, 0.05);
     s.t += dt; s.elapsed += dt;
+    if (!s.nav) { buildNav(); updateNav(); } else if (s.t - s.nav.t > 0.35) updateNav();
     if (s.shake > 0) s.shake = Math.max(0, s.shake - dt * 1.5);
     // scheduled actions
     const due = s.actions.filter(a => a.t <= s.t); s.actions = s.actions.filter(a => a.t > s.t); due.forEach(a => { try { a.fn(); } catch (err) { console.error(err); } });
