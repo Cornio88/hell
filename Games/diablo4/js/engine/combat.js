@@ -19,7 +19,7 @@
     S = {
       cfg, char, account: cfg.account, sctx, area: cfg.area, zone, mode: cfg.area.type, level: cfg.level, diff: DATA.diffById[char.difficulty],
       t: 0, floor: 1, maxFloors: cfg.area.type === 'dungeon' ? 3 : 1, w: 44, h: 44, seed: Math.floor(Math.random() * 1e9),
-      obstacles: [], decor: [], enemies: [], minions: [], projectiles: [], zones: [], corpses: [], orbs: [], drops: [], particles: [], texts: [], actions: [], beams: [], walls: [],
+      obstacles: [], decor: [], props: [], lights: [], decals: [], bloodDecals: [], paths: [], enemies: [], minions: [], projectiles: [], zones: [], corpses: [], orbs: [], drops: [], particles: [], texts: [], actions: [], beams: [], walls: [],
       kills: 0, eliteKills: 0, bossKilled: false, spawnTimer: 2, packIndex: 0, quota: 0, spawned: 0, cleared: false, exit: null, chest: null, result: null, done: false,
       input: { mx: 0, my: 0, aim: null }, log: [], shake: 0, hooks: cfg.hooks || {}, elapsed: 0, eventTimer: 0, bossRef: null, lootLog: [], xpGained: 0, goldGained: 0,
       aspectUnlocked: null, pitTimer: 0, timeLimit: cfg.area.type === 'event' ? 90 : 0, waveTimer: 0, wave: 0, treasureGoblinSpawned: false
@@ -50,19 +50,12 @@
 
   function buildMap() {
     const rng = U.seededRng(S.seed + S.floor * 7919);
-    S.obstacles = []; S.decor = []; S.walls = [];
-    const count = S.mode === 'boss' ? 6 : Math.round(S.w * S.h / 90);
-    for (let i = 0; i < count; i++) {
-      const o = { x: 2 + rng() * (S.w - 4), y: 2 + rng() * (S.h - 4), r: 0.7 + rng() * 1.1, kind: rng() < 0.5 ? 'tree' : rng() < 0.6 ? 'rock' : 'pillar', seed: rng() };
-      if (U.dist(o.x, o.y, S.player.x, S.player.y) < 4) continue;
-      if (S.mode === 'boss' && U.dist(o.x, o.y, S.w / 2, S.h / 2) < 8) continue;
-      S.obstacles.push(o);
-    }
-    for (let i = 0; i < 160; i++) S.decor.push({ x: rng() * S.w, y: rng() * S.h, k: Math.floor(rng() * 4), s: 0.2 + rng() * 0.5 });
     S.player.x = S.w / 2; S.player.y = S.h - 6;
     if (S.mode === 'boss') { S.player.y = S.h - 5; }
+    const L = Layout.build(S, rng);
+    S.obstacles = L.obstacles; S.decor = L.decor; S.props = L.props; S.lights = L.lights; S.decals = L.decals; S.floorKind = L.floor; S.ambient = L.ambient; S.paths = L.paths; S.walls = [];
+    S.bloodDecals = [];
   }
-
   function setupMode() {
     const m = S.mode;
     S.exit = null; S.chest = null; S.cleared = false; S.quota = 0; S.spawned = 0; S.packIndex = 0;
@@ -93,7 +86,7 @@
   function isCC(e) { return CC_STATUSES.some(s => e.st[s]); }
   function isHardCC(e) { return HARD_CC.some(s => e.st[s]); }
   function resolveObstacles(ent) {
-    for (const o of S.obstacles) { const d = U.dist(ent.x, ent.y, o.x, o.y); const min = o.r + ent.r * 0.8; if (d < min && d > 0.0001) { const k = (min - d) / d; ent.x += (ent.x - o.x) * k; ent.y += (ent.y - o.y) * k; ent.blocked = true; } }
+    Layout.collide(S.obstacles, ent);
     for (const w of S.walls) { const d = U.dist(ent.x, ent.y, w.x, w.y); const min = w.r + ent.r * 0.8; if (d < min && d > 0.0001 && ent.kind !== w.owner) { const k = (min - d) / d; ent.x += (ent.x - w.x) * k; ent.y += (ent.y - w.y) * k; } }
     ent.x = U.clamp(ent.x, ent.r, S.w - ent.r); ent.y = U.clamp(ent.y, ent.r, S.h - ent.r);
   }

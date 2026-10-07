@@ -72,6 +72,25 @@
     const tex = new T.CanvasTexture(c); tex.wrapS = tex.wrapT = T.RepeatWrapping; tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = 4;
     texCache[key] = tex; return tex;
   }
+  function stoneTexture(kind) {
+    const key = 'stone_' + kind; if (texCache[key]) return texCache[key];
+    const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d'); const rng = U.seededRng(kind === 'arena' ? 31 : 13);
+    const base = kind === 'arena' ? '#3a2e2e' : '#4a4a52';
+    g.fillStyle = base; g.fillRect(0, 0, 512, 512);
+    const n = 4, sz = 512 / n;
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { const shade = U.mixHex(base, rng() < 0.5 ? '#000000' : '#ffffff', 0.08 + rng() * 0.1); g.fillStyle = shade; g.fillRect(x * sz + 3, y * sz + 3, sz - 6, sz - 6); for (let i = 0; i < 40; i++) { g.fillStyle = U.rgba(rng() < 0.5 ? '#000000' : '#ffffff', 0.08); g.fillRect(x * sz + rng() * sz, y * sz + rng() * sz, 2 + rng() * 4, 2 + rng() * 4); } }
+    g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 5; for (let i = 0; i <= n; i++) { g.beginPath(); g.moveTo(i * sz, 0); g.lineTo(i * sz, 512); g.stroke(); g.beginPath(); g.moveTo(0, i * sz); g.lineTo(512, i * sz); g.stroke(); }
+    if (kind === 'arena') { g.strokeStyle = 'rgba(120,20,20,0.35)'; g.lineWidth = 2; for (let i = 0; i < 30; i++) { g.beginPath(); g.moveTo(rng() * 512, rng() * 512); g.lineTo(rng() * 512, rng() * 512); g.stroke(); } }
+    const tex = new T.CanvasTexture(c); tex.wrapS = tex.wrapT = T.RepeatWrapping; tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = 4; texCache[key] = tex; return tex;
+  }
+  function brickTexture() {
+    if (texCache.brick) return texCache.brick;
+    const c = document.createElement('canvas'); c.width = 256; c.height = 256; const g = c.getContext('2d'); const rng = U.seededRng(5);
+    g.fillStyle = '#2a2a30'; g.fillRect(0, 0, 256, 256);
+    const bh = 32, bw = 64;
+    for (let y = 0; y < 256; y += bh) { const off = (y / bh) % 2 ? bw / 2 : 0; for (let x = -bw; x < 256; x += bw) { g.fillStyle = U.mixHex('#5a5a64', rng() < 0.5 ? '#000000' : '#ffffff', rng() * 0.15); g.fillRect(x + off + 2, y + 2, bw - 4, bh - 4); } }
+    const tex = new T.CanvasTexture(c); tex.wrapS = tex.wrapT = T.RepeatWrapping; tex.colorSpace = T.SRGBColorSpace; texCache.brick = tex; return tex;
+  }
   function glowSprite() {
     if (texCache.glow) return texCache.glow;
     const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
@@ -79,33 +98,103 @@
   }
 
   // ---------------------------------------------------------------- world build
+  let torchLights = [], ambientPts = null, ambientKind = null;
   function buildWorld(S) {
     if (world) { scene.remove(world.group); disposeGroup(world.group); }
     for (const [, e] of ents) scene.remove(e.model.group); ents.clear();
     fxPools.forEach(p => p.clear());
-    world = { S, group: new T.Group(), floor: S.floor, zoneId: S.zone.id };
-    const z = S.zone; const g = world.group;
-    scene.background = new T.Color(U.mixHex(z.ground, '#000000', 0.55));
-    scene.fog = new T.Fog(scene.background, 26, 60);
-    const tex = groundTexture(z); tex.repeat.set(S.w / 9, S.h / 9);
+    torchLights.forEach(l => scene.remove(l)); torchLights = [];
+    world = { S, group: new T.Group(), floor: S.floor, zoneId: S.zone.id, flames: [], cloth: [] };
+    const z = S.zone; const g = world.group; const isStone = S.floorKind === 'stone' || S.floorKind === 'arena';
+    const bgCol = isStone ? '#07070a' : U.mixHex(z.ground, '#000000', 0.55);
+    scene.background = new T.Color(bgCol);
+    scene.fog = new T.Fog(scene.background, isStone ? 20 : 26, isStone ? 48 : 60);
+    lights.hemi.intensity = isStone ? 0.3 : 0.55; lights.dir.intensity = isStone ? 0.75 : 1.4; lights.dir.color.set(isStone ? '#9aa6c8' : S.floorKind === 'arena' ? '#ffb090' : '#ffe9c8');
+    // floor
+    const tex = isStone ? stoneTexture(S.floorKind) : groundTexture(z); tex.repeat.set(S.w / (isStone ? 4 : 9), S.h / (isStone ? 4 : 9));
     const ground = new T.Mesh(new T.PlaneGeometry(S.w, S.h), new T.MeshStandardMaterial({ map: tex, roughness: 1, metalness: 0 }));
     ground.rotation.x = -PI / 2; ground.position.set(S.w / 2, 0, S.h / 2); ground.receiveShadow = true; g.add(ground);
-    // surrounding darkness floor so the void isn't visible
-    const outer = new T.Mesh(new T.PlaneGeometry(S.w + 80, S.h + 80), new T.MeshStandardMaterial({ color: U.mixHex(z.ground, '#000000', 0.6), roughness: 1 }));
+    const outer = new T.Mesh(new T.PlaneGeometry(S.w + 80, S.h + 80), new T.MeshStandardMaterial({ color: U.mixHex(bgCol, '#000000', 0.2), roughness: 1 }));
     outer.rotation.x = -PI / 2; outer.position.set(S.w / 2, -0.05, S.h / 2); g.add(outer);
+    // paths (dirt strips)
+    (S.paths || []).forEach(pts => { for (let k = 0; k < pts.length - 1; k++) { const [x1, y1] = pts[k], [x2, y2] = pts[k + 1]; const len = U.dist(x1, y1, x2, y2); const m = new T.Mesh(Models.geo('unitplane', () => new T.PlaneGeometry(1, 1)), new T.MeshStandardMaterial({ color: U.mixHex(z.ground2, '#5a4a30', 0.5), roughness: 1, transparent: true, opacity: 0.55 })); m.rotation.x = -PI / 2; m.scale.set(len + 1, 2.6, 1); m.position.set((x1 + x2) / 2, 0.012, (y1 + y2) / 2); m.rotation.z = -Math.atan2(y2 - y1, x2 - x1); g.add(m); } });
+    // decals
+    (S.decals || []).forEach(d => { const col = d.kind === 'puddle' ? '#1a3040' : d.kind === 'blood' ? '#4a0a0a' : d.kind === 'lava' ? '#ff6a1a' : '#b36cff'; const m = new T.Mesh(circleGeo(), new T.MeshStandardMaterial({ color: col, roughness: d.kind === 'puddle' ? 0.1 : 0.9, metalness: d.kind === 'puddle' ? 0.5 : 0, transparent: true, opacity: d.kind === 'rune' ? 0.5 : 0.85, emissive: d.kind === 'lava' || d.kind === 'rune' ? col : '#000000', emissiveIntensity: d.kind === 'lava' ? 1.2 : d.kind === 'rune' ? 0.8 : 0 })); m.rotation.x = -PI / 2; m.position.set(d.x, 0.015, d.y); m.scale.set(d.r, d.r, 1); m.receiveShadow = true; if (d.kind === 'rune') { const ring = new T.Mesh(thinRing(), new T.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8 })); ring.rotation.x = -PI / 2; ring.position.set(d.x, 0.02, d.y); ring.scale.set(d.r, d.r, 1); g.add(ring); m.material.opacity = 0.12; world.rune = ring; } g.add(m); });
     // border walls
-    const wallM = Models.mat(U.mixHex(z.ground2, '#000000', 0.35), { rough: 0.95, flat: true });
-    const mk = (w, d, x, zz) => { const m = new T.Mesh(new T.BoxGeometry(w, 1.6, d), wallM); m.position.set(x, 0.8, zz); m.castShadow = true; m.receiveShadow = true; g.add(m); };
+    const wallM = isStone ? new T.MeshStandardMaterial({ map: brickTexture(), roughness: 0.95 }) : Models.mat(U.mixHex(z.ground2, '#000000', 0.35), { rough: 0.95, flat: true });
+    const wallH = isStone ? 2.6 : 1.6;
+    const mk = (w, d, x, zz) => { const m = new T.Mesh(new T.BoxGeometry(w, wallH, d), wallM); m.position.set(x, wallH / 2, zz); m.castShadow = true; m.receiveShadow = true; g.add(m); };
     mk(S.w + 2, 1, S.w / 2, -0.5); mk(S.w + 2, 1, S.w / 2, S.h + 0.5); mk(1, S.h + 2, -0.5, S.h / 2); mk(1, S.h + 2, S.w + 0.5, S.h / 2);
-    for (let i = 0; i < 14; i++) { const t = i / 14; [[-0.5, t * S.h], [S.w + 0.5, t * S.h], [t * S.w, -0.5], [t * S.w, S.h + 0.5]].forEach(([x, zz]) => { const p = new T.Mesh(Models.geo('post', () => new T.CylinderGeometry(0.25, 0.3, 2.4, 6)), wallM); p.position.set(x, 1.2, zz); g.add(p); }); }
-    S.obstacles.forEach(o => { const m = Models.obstacle(o, z.decor); m.position.set(o.x, 0, o.y); g.add(m); });
+    if (!isStone) for (let i = 0; i < 14; i++) { const t = i / 14; [[-0.5, t * S.h], [S.w + 0.5, t * S.h], [t * S.w, -0.5], [t * S.w, S.h + 0.5]].forEach(([x, zz]) => { const p = new T.Mesh(Models.geo('post', () => new T.CylinderGeometry(0.25, 0.3, 2.4, 6)), wallM); p.position.set(x, 1.2, zz); g.add(p); }); }
+    // distant backdrop beyond the walls (silhouette trees / dunes / crags)
+    const back = new T.Group(); const bm = Models.mat(U.mixHex(bgCol, '#ffffff', 0.08), { rough: 1, flat: true }); const rngB = U.seededRng(S.seed);
+    for (let i = 0; i < 70; i++) { const side = Math.floor(rngB() * 4); const t = rngB(); const dist = 3 + rngB() * 14; let x, zz; if (side === 0) { x = t * S.w; zz = -dist; } else if (side === 1) { x = t * S.w; zz = S.h + dist; } else if (side === 2) { x = -dist; zz = t * S.h; } else { x = S.w + dist; zz = t * S.h; } const kind = z.decor === 'desert' || z.decor === 'salt' ? 'dune' : isStone ? 'crag' : 'tree'; let m; if (kind === 'tree') { m = new T.Mesh(Models.geo('bgtree', () => new T.ConeGeometry(1.2, 4, 6)), bm); m.position.set(x, 2, zz); m.scale.setScalar(0.8 + rngB() * 1.5); } else { m = new T.Mesh(Models.geo('bgrock', () => new T.DodecahedronGeometry(2, 0)), bm); m.position.set(x, 0.5, zz); m.scale.set(1 + rngB() * 2, 0.6 + rngB() * (kind === 'crag' ? 2.5 : 0.8), 1 + rngB() * 2); } back.add(m); }
+    g.add(back);
+    // obstacles
+    S.obstacles.forEach(o => {
+      if (o.rect) {
+        if (o.kind === 'hut') { const m = Models.hut(o); m.position.set(o.x, 0, o.y); g.add(m); return; }
+        const h = o.kind === 'fence' ? 1.0 : o.kind === 'ruin' ? 1.4 + (o.hw + o.hh) * 0.05 : o.kind === 'sarcophagus' ? 0.9 : 2.6;
+        const m = new T.Mesh(new T.BoxGeometry(o.hw * 2, h, o.hh * 2), o.kind === 'fence' ? Models.mat('#5a3a1a', { rough: 0.95 }) : o.kind === 'sarcophagus' ? Models.mat('#6a6a72', { rough: 0.7, flat: true }) : (isStone ? wallM : Models.mat('#5a5a62', { rough: 0.95, flat: true })));
+        m.position.set(o.x, h / 2, o.y); m.castShadow = true; m.receiveShadow = true; g.add(m);
+        if (o.kind === 'fence') { for (let x = -o.hw; x <= o.hw; x += 1.2) for (let zz = -o.hh; zz <= o.hh; zz += 1.2) { const p = new T.Mesh(Models.geo('fpost', () => new T.BoxGeometry(0.18, 1.2, 0.18)), Models.mat('#4a2e14', { rough: 0.95 })); p.position.set(o.x + x, 0.6, o.y + zz); g.add(p); } m.scale.y = 0.25; m.position.y = 0.75; }
+        if (o.kind === 'ruin') { const cap = new T.Mesh(new T.BoxGeometry(o.hw * 2 + 0.2, 0.2, o.hh * 2 + 0.2), Models.mat('#4a4a52', { rough: 0.95, flat: true })); cap.position.set(o.x, h + 0.1, o.y); g.add(cap); }
+        if (o.kind === 'sarcophagus') { const lid = new T.Mesh(new T.BoxGeometry(o.hw * 2 - 0.2, 0.2, o.hh * 2 - 0.2), Models.mat('#8a8a92', { rough: 0.6, flat: true })); lid.position.set(o.x, 1.0, o.y); g.add(lid); }
+        return;
+      }
+      const m = (o.kind === 'tree' || o.kind === 'rock' || o.kind === 'pillar') ? Models.obstacle(o, z.decor) : Models.obstacleExtra(o, z);
+      m.position.set(o.x, 0, o.y); g.add(m);
+    });
+    // props
+    (S.props || []).forEach(p => { const m = Models.prop(p, z); m.position.set(p.x, 0, p.y); g.add(m); if (m.userData.flame) world.flames.push(m.userData.flame); if (m.userData.cloth) world.cloth.push(m.userData.cloth); });
+    // lights (pool of nearest)
+    world.lightDefs = S.lights || [];
+    for (let i = 0; i < 6; i++) { const l = new T.PointLight(0xffa040, 0, 7, 1.6); scene.add(l); torchLights.push(l); }
     // decor instanced
-    const decoGeo = z.decor === 'snow' || z.decor === 'salt' || z.decor === 'desert' ? new T.DodecahedronGeometry(0.14, 0) : new T.ConeGeometry(0.1, 0.32, 4), decoMat = Models.mat(U.mixHex(z.ground2, z.decor === 'snow' ? '#ffffff' : z.decor === 'desert' || z.decor === 'salt' ? '#8a7a60' : '#7dff5c', 0.3), { rough: 1, flat: true });
-    const inst = new T.InstancedMesh(decoGeo, decoMat, S.decor.length); const mtx = new T.Matrix4();
-    S.decor.forEach((d, i) => { mtx.makeRotationY(d.k); mtx.setPosition(d.x, 0.1 * d.s, d.y); mtx.scale(new T.Vector3(1 + d.s, 1 + d.s * 2, 1 + d.s)); inst.setMatrixAt(i, mtx); });
-    inst.receiveShadow = true; g.add(inst);
+    if (!isStone) { const decoGeo = z.decor === 'snow' || z.decor === 'salt' || z.decor === 'desert' ? new T.DodecahedronGeometry(0.14, 0) : new T.ConeGeometry(0.1, 0.32, 4), decoMat = Models.mat(U.mixHex(z.ground2, z.decor === 'snow' ? '#ffffff' : z.decor === 'desert' || z.decor === 'salt' ? '#8a7a60' : '#7dff5c', 0.3), { rough: 1, flat: true });
+      const inst = new T.InstancedMesh(decoGeo, decoMat, S.decor.length); const mtx = new T.Matrix4();
+      S.decor.forEach((d, i) => { mtx.makeRotationY(d.k); mtx.setPosition(d.x, 0.1 * d.s, d.y); mtx.scale(new T.Vector3(1 + d.s, 1 + d.s * 2, 1 + d.s)); inst.setMatrixAt(i, mtx); });
+      inst.receiveShadow = true; g.add(inst); }
     scene.add(g);
+    setupAmbient(S.ambient || 'dust');
     camTarget.set(S.player.x, 0, S.player.y); camPos.copy(camTarget).add(CAM_OFF);
+  }
+  // ambient weather/atmosphere particles that drift around the camera
+  const AMB_N = 220; let ambData = null;
+  function setupAmbient(kind) {
+    if (ambientPts) { scene.remove(ambientPts); ambientPts = null; }
+    ambientKind = kind;
+    const col = kind === 'snow' ? '#ffffff' : kind === 'leaves' ? '#c9a24a' : kind === 'fireflies' ? '#b8ff6a' : kind === 'embers' ? '#ff8a3a' : '#d8d0c0';
+    const geo = new T.BufferGeometry(); const pos = new Float32Array(AMB_N * 3); ambData = [];
+    for (let i = 0; i < AMB_N; i++) { ambData.push({ x: (Math.random() - 0.5) * 30, y: Math.random() * 8, z: (Math.random() - 0.5) * 30, ph: Math.random() * 6 }); }
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    ambientPts = new T.Points(geo, new T.PointsMaterial({ size: kind === 'snow' ? 0.16 : kind === 'leaves' ? 0.2 : kind === 'embers' ? 0.14 : 0.1, color: col, transparent: true, opacity: kind === 'dust' ? 0.35 : 0.85, depthWrite: false, map: glowSprite(), blending: kind === 'fireflies' || kind === 'embers' ? T.AdditiveBlending : T.NormalBlending }));
+    ambientPts.frustumCulled = false; scene.add(ambientPts);
+  }
+  function updateAmbient(S, dt) {
+    if (!ambientPts) return; const p = S.player; const arr = ambientPts.geometry.attributes.position.array; const t = S.t;
+    for (let i = 0; i < AMB_N; i++) {
+      const a = ambData[i];
+      if (ambientKind === 'snow') { a.y -= dt * 1.4; a.x += Math.sin(t + a.ph) * dt * 0.6; if (a.y < 0) a.y = 8; }
+      else if (ambientKind === 'leaves') { a.y -= dt * 0.9; a.x += Math.sin(t * 2 + a.ph) * dt * 1.5; a.z += Math.cos(t * 1.3 + a.ph) * dt; if (a.y < 0) a.y = 7; }
+      else if (ambientKind === 'embers') { a.y += dt * 1.2; a.x += Math.sin(t * 3 + a.ph) * dt * 0.5; if (a.y > 7) a.y = 0; }
+      else if (ambientKind === 'fireflies') { a.y = 0.5 + Math.sin(t * 0.7 + a.ph) * 0.6 + 0.6; a.x += Math.sin(t * 0.9 + a.ph) * dt * 0.8; a.z += Math.cos(t * 0.8 + a.ph * 2) * dt * 0.8; }
+      else { a.y += Math.sin(t * 0.5 + a.ph) * dt * 0.1; a.x += dt * 0.15; if (a.x > 15) a.x = -15; }
+      // wrap around the player
+      if (a.x > 15) a.x -= 30; if (a.x < -15) a.x += 30; if (a.z > 15) a.z -= 30; if (a.z < -15) a.z += 30;
+      arr[i * 3] = p.x + a.x; arr[i * 3 + 1] = a.y; arr[i * 3 + 2] = p.y + a.z;
+    }
+    if (ambientKind === 'fireflies') ambientPts.material.opacity = 0.5 + Math.sin(t * 2) * 0.3;
+    ambientPts.geometry.attributes.position.needsUpdate = true;
+  }
+  function updateWorldFx(S, dt) {
+    if (!world) return; const t = S.t;
+    world.flames.forEach((f, i) => { const k = 1 + Math.sin(t * 14 + i) * 0.12 + Math.sin(t * 23 + i * 2) * 0.08; f.scale.set(k, 1 + (k - 1) * 2, k); f.rotation.y += dt * 2; });
+    world.cloth.forEach((c, i) => { c.rotation.y = Math.sin(t * 1.5 + i) * 0.15; });
+    if (world.rune) world.rune.rotation.z += dt * 0.2;
+    // nearest torch lights
+    const p = S.player; const defs = world.lightDefs.slice().sort((a, b) => U.dist(a.x, a.y, p.x, p.y) - U.dist(b.x, b.y, p.x, p.y));
+    torchLights.forEach((l, i) => { const d = defs[i]; if (!d || U.dist(d.x, d.y, p.x, p.y) > 24) { l.intensity = 0; return; } l.position.set(d.x, d.h, d.y); l.color.set(d.color); l.distance = d.dist; l.intensity = d.intensity * (d.flicker ? 0.85 + Math.sin(t * 17 + i * 3) * 0.1 + Math.sin(t * 31 + i) * 0.05 : 1); });
   }
   function disposeGroup(g) { g.traverse(o => { if (o.geometry && !o.geometry.userData.shared) { /* geometry cached in Models for most; dispose only unique */ } }); }
 
@@ -170,6 +259,7 @@
   const corpsePool = mkPool((c) => { const g = Models.corpse(); g.position.set(c.x, 0, c.y); g.rotation.y = Math.random() * 6; return { obj: g }; }, (o, c) => { });
   const orbPool = mkPool((ob) => { const g = new T.Group(); g.add(Models.orb()); const sp = new T.Sprite(new T.SpriteMaterial({ map: glowSprite(), color: '#ff3b3b', transparent: true, opacity: 0.7, blending: T.AdditiveBlending, depthWrite: false })); sp.scale.setScalar(1.6); sp.position.y = 0.35; g.add(sp); g.position.set(ob.x, 0, ob.y); return { obj: g }; }, (o, ob) => { o.obj.position.y = Math.sin(ob.t * 6) * 0.08; });
   const wallPool = mkPool((w) => { const m = Models.wallSegment(w.color); m.position.set(w.x, 0, w.y); return { obj: m }; }, (o, w) => { o.obj.scale.y = Math.min(1, w.t * 3); });
+  const bloodPool = mkPool((b) => { const m = new T.Mesh(circleGeo(), new T.MeshStandardMaterial({ color: b.color || '#5a0a0a', roughness: 0.6, transparent: true, opacity: 0.85 })); m.rotation.x = -PI / 2; m.position.set(b.x, 0.018, b.y); m.scale.set(0.1, 0.1, 1); m.rotation.z = Math.random() * 6; return { obj: m }; }, (o, b) => { const s = Math.min(b.r, 0.2 + b.t * 3); o.obj.scale.set(s, s, 1); o.obj.material.opacity = 0.85 * Math.max(0, 1 - Math.max(0, b.t - 25) / 10); });
   const miscPool = mkPool((it) => { let obj; if (it.kind === 'chest') obj = Models.chest(); else obj = Models.stairs(); obj.position.set(it.x, 0, it.y); return { obj, kind: it.kind }; }, (o, it) => { if (o.kind === 'chest' && it.opened && o.obj.userData.lid) o.obj.userData.lid.rotation.x = -1.2; });
   // particles
   let points = null, pPos = null, pCol = null; const MAXP = 500;
@@ -206,7 +296,9 @@
       alive.add(e.id);
       const rec = getModel(e, S); const m = rec.model;
       const g = m.group; g.visible = !e.hidden;
-      g.position.set(e.x, 0, e.y);
+      let ey = 0;
+      if (e.kind === 'enemy') { if (e.dead) ey = -Math.max(0, e.deathT - 2.2) * 0.8; else if (S.t - e.spawnT < 0.7 && !e.boss) ey = -1.6 * (1 - (S.t - e.spawnT) / 0.7); }
+      g.position.set(e.x, ey, e.y);
       const facing = e.facing !== undefined ? e.facing : 0;
       g.rotation.y = Math.atan2(Math.cos(facing), Math.sin(facing));
       const st = { moving: e.kind === 'player' ? e.moving : (e.kind === 'enemy' ? !e.dead && !(e.ai && e.ai.telegraph) && (e.ai && e.ai.state !== 'idle') : true), speed: e.speed || 4, attack: 0, dead: !!e.dead, mounted: !!e.mounted, channel: !!e.channel, dash: !!e.dash };
@@ -296,6 +388,9 @@
     corpsePool.sync(S.corpses, c => { if (!c._k) c._k = U.uid('c'); return c._k; });
     orbPool.sync(S.orbs, o => { if (!o._k) o._k = U.uid('o'); return o._k; });
     wallPool.sync(S.walls, w => { if (!w._k) w._k = U.uid('w'); return w._k; });
+    (S.bloodDecals || []).forEach(b => { b.t += dt; }); if (S.bloodDecals) S.bloodDecals = S.bloodDecals.filter(b => b.color && b.t < 35);
+    bloodPool.sync(S.bloodDecals || [], b => { if (!b._k) b._k = U.uid('bl'); return b._k; });
+    updateWorldFx(S, dt); updateAmbient(S, dt);
     const misc = []; if (S.chest) misc.push({ kind: 'chest', x: S.chest.x, y: S.chest.y, opened: S.chest.opened, _k: 'chest' + S.floor }); if (S.exit) misc.push({ kind: 'exit', x: S.exit.x, y: S.exit.y, _k: 'exit' + S.floor });
     miscPool.sync(misc, m => m._k);
     updateParticles(S);

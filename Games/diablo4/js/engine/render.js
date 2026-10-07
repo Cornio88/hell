@@ -81,6 +81,7 @@
     for (const d of S.decor) { if (d.x < camX - W / 2 / scale - 1 || d.x > camX + W / 2 / scale + 1 || d.y < camY - H / 2 / scale - 1 || d.y > camY + H / 2 / scale + 1) continue; const s = Render.worldToScreen(d.x, d.y); if (d.k === 0) ctx.fillRect(s.x, s.y, d.s * scale * 0.6, d.s * scale * 0.25); else if (d.k === 1) { ctx.beginPath(); ctx.arc(s.x, s.y, d.s * scale * 0.2, 0, Math.PI * 2); ctx.fill(); } else if (d.k === 2) { ctx.fillRect(s.x, s.y, d.s * scale * 0.2, d.s * scale * 0.6); } else { ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x + d.s * scale * 0.4, s.y + d.s * scale * 0.2); ctx.lineTo(s.x, s.y + d.s * scale * 0.4); ctx.fill(); } }
     // obstacles
     for (const o of S.obstacles) {
+      if (o.rect) { const a = Render.worldToScreen(o.x - o.hw, o.y - o.hh); ctx.fillStyle = '#4a4a52'; ctx.fillRect(a.x, a.y, o.hw * 2 * scale, o.hh * 2 * scale); continue; }
       if (o.x < camX - W / 2 / scale - 3 || o.x > camX + W / 2 / scale + 3 || o.y < camY - H / 2 / scale - 3 || o.y > camY + H / 2 / scale + 3) continue;
       const s = Render.worldToScreen(o.x, o.y); const r = o.r * scale;
       ellipseShadow(s.x, s.y, r);

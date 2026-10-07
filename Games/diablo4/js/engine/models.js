@@ -57,6 +57,10 @@
       case 'shield': { const s = mesh(box(0.42, 0.55, 0.05), mat('#6a5a4a', { metal: 0.3, rough: 0.6 }), 0, 0.2, 0.03); add(s); add(mesh(cyl(0.1, 0.1, 0.07, 12), steel, 0, 0.2, 0.06).rotateX(PI / 2)); break; }
       case 'focus': add(mesh(sphere(0.09), mat('#8bd36b', { emissive: '#8bd36b', eint: 1.0, opacity: 0.85 }), 0, 0.15, 0)); add(mesh(torus(0.12, 0.012), gold, 0, 0.15, 0)); break;
       case 'totem': add(mesh(cyl(0.05, 0.06, 0.5), wood, 0, 0.25, 0)); add(mesh(box(0.14, 0.1, 0.1), mat('#c9a86a'), 0, 0.5, 0)); break;
+      case 'bow': { const b = mesh(torus(0.42, 0.018), wood, 0, 0.3, 0); b.scale.set(0.45, 1, 1); add(b); add(mesh(box(0.006, 0.84, 0.006), mat('#ddd'), 0.19, 0.3, 0)); break; }
+      case 'club': add(mesh(cyl(0.025, 0.05, 0.6, 7), wood, 0, 0.3, 0)); add(mesh(sphere(0.07, 7), wood, 0, 0.6, 0)); break;
+      case 'knife': add(mesh(box(0.035, 0.22, 0.008), steel, 0, 0.2, 0)); add(mesh(cyl(0.014, 0.016, 0.1), wood, 0, 0.04, 0)); break;
+      case 'spear': add(mesh(cyl(0.014, 0.018, 1.2), wood, 0, 0.6, 0)); add(mesh(cone(0.035, 0.22, 5), steel, 0, 1.3, 0)); break;
       default: add(mesh(box(0.05, 0.5, 0.012), steel, 0, 0.4, 0)); add(mesh(cyl(0.018, 0.02, 0.16), wood, 0, 0.05, 0));
     }
     return g;
@@ -348,20 +352,29 @@
   }
 
   // Monster from an enemy def
+  function familyWeapon(def) {
+    const b = def.behavior, f = def.family;
+    if (b === 'ranged') return f === 'skeleton' || f === 'bandit' || f === 'khazra' || f === 'nahantu' ? 'bow' : f === 'demon' ? 'spear' : 'wand';
+    if (b === 'caster' || b === 'summoner') return 'staff';
+    if (f === 'fallen') return 'knife'; if (f === 'cannibal' || f === 'zombie') return 'club'; if (f === 'khazra') return 'spear'; if (f === 'bandit') return 'axe1h'; if (f === 'vampire') return 'dagger'; if (f === 'cultist' || f === 'nahantu') return 'staff';
+    return 'sword1h';
+  }
   Models.monster = function (def, rank) {
     const shape = def.shape; const color = def.color; const size = def.r / 0.55;
+    const fw = familyWeapon(def); const f = def.family;
+    const famTweak = f === 'zombie' ? { hunch: 0.35, eyeGlow: '#9aff8a', hairStyle: 'bald', tunic: darken(color, 0.35) } : f === 'drowned' ? { hunch: 0.25, eyeGlow: '#7fd6ff', hairStyle: 'wild', hair: '#2a6a5a' } : f === 'bandit' ? { helm: 'hood', helmColor: darken(color, 0.3), beard: 'full', hair: '#2a1a0a' } : f === 'cannibal' ? { hairStyle: 'mohawk', hair: '#1a1a1a', beard: 'stubble', eyeGlow: '#ff8a4a' } : f === 'vampire' ? { hairStyle: 'long', hair: '#1a1a1a', skin: '#d8d0d0', eyeGlow: '#ff3b3b', back: 'cape', backColor: '#3a0a14' } : f === 'nahantu' ? { hairStyle: 'braid', hair: '#1a1a1a', helm: null } : f === 'cultist' ? { helm: 'hood', helmColor: color } : {};
     const eliteScale = rank === 'boss' ? 1.0 : rank === 'superunique' ? 1.25 : rank === 'elite' ? 1.15 : rank === 'champion' ? 1.08 : 1;
     let m;
     switch (shape) {
-      case 'skull': m = new Humanoid({ skin: '#e8e2d0', bone: true, hairStyle: 'bald', beard: 'none', tunic: darken(color, 0.3), pants: darken(color, 0.4), boots: '#3a3a3a', body: 'lean', frame: 'slender', scale: 0.95 * size * eliteScale, monster: true, eyeGlow: '#7fd6ff', weapon: def.behavior === 'ranged' ? null : 'sword1h', offhand: def.behavior === 'ranged' ? 'wand' : null }); break;
-      case 'imp': m = new Humanoid({ skin: color, hairStyle: 'bald', tunic: darken(color, 0.2), pants: darken(color, 0.3), boots: darken(color, 0.4), body: 'lean', frame: 'slender', scale: 0.7 * size * eliteScale, monster: true, eyeGlow: '#ffe55c', horns: true, tail: true, hunch: 0.4 }); break;
-      case 'brute': m = new Humanoid({ skin: color, hairStyle: 'bald', tunic: darken(color, 0.15), pants: darken(color, 0.3), boots: darken(color, 0.4), body: 'heavy', frame: 'broad', scale: 1.25 * size * eliteScale, monster: true, eyeGlow: '#ff3b3b', hunch: 0.35, horns: rank === 'boss' }); break;
-      case 'horned': m = new Humanoid({ skin: color, hairStyle: 'wild', hair: darken(color, 0.5), tunic: darken(color, 0.2), pants: darken(color, 0.3), boots: darken(color, 0.4), body: 'average', scale: 1.05 * size * eliteScale, monster: true, eyeGlow: '#ffe55c', horns: true, weapon: 'axe1h' }); break;
+      case 'skull': m = new Humanoid({ skin: '#e8e2d0', bone: true, hairStyle: 'bald', beard: 'none', tunic: darken(color, 0.3), pants: darken(color, 0.4), boots: '#3a3a3a', body: 'lean', frame: 'slender', scale: 0.95 * size * eliteScale, monster: true, eyeGlow: def.element === 'cold' ? '#7fd6ff' : '#9aff8a', weapon: fw === 'bow' ? null : fw, offhand: fw === 'bow' ? 'bow' : (def.id === 'skeleton' && Math.random() < 0.5 ? 'shield' : null), helm: def.id === 'skeleton_captain' ? 'helm' : null, helmColor: '#6a6a70' }); break;
+      case 'imp': m = new Humanoid(Object.assign({ skin: color, hairStyle: 'bald', tunic: darken(color, 0.2), pants: darken(color, 0.3), boots: darken(color, 0.4), body: 'lean', frame: 'slender', scale: 0.7 * size * eliteScale, monster: true, eyeGlow: '#ffe55c', horns: true, tail: true, hunch: 0.4, weapon: fw === 'bow' ? null : fw, offhand: fw === 'bow' ? 'bow' : null }, def.id === 'fallen_shaman' ? { helm: 'crown', weapon: 'staff' } : {})); break;
+      case 'brute': m = new Humanoid({ skin: color, hairStyle: 'bald', tunic: darken(color, 0.15), pants: darken(color, 0.3), boots: darken(color, 0.4), body: 'heavy', frame: 'broad', scale: 1.25 * size * eliteScale, monster: true, eyeGlow: '#ff3b3b', hunch: 0.35, horns: rank === 'boss' || f === 'demon', weapon: f === 'cannibal' || f === 'fallen' ? 'club' : f === 'demon' ? 'axe2h' : 'mace2h' }); break;
+      case 'horned': m = new Humanoid({ skin: color, hairStyle: 'wild', hair: darken(color, 0.5), tunic: darken(color, 0.2), pants: darken(color, 0.3), boots: darken(color, 0.4), body: 'average', scale: 1.05 * size * eliteScale, monster: true, eyeGlow: '#ffe55c', horns: true, weapon: fw === 'bow' ? null : (f === 'khazra' ? 'spear' : 'axe1h'), offhand: fw === 'bow' ? 'bow' : null }); break;
       case 'armored': m = new Humanoid({ skin: darken(color, 0.3), hairStyle: 'bald', tunic: color, chest: lighten(color, 0.1), pants: darken(color, 0.3), boots: darken(color, 0.4), gloves: color, helm: 'helm', helmColor: color, body: 'heavy', scale: 1.1 * size * eliteScale, monster: true, eyeGlow: '#ff3b3b', armored: true, weapon: 'sword2h' }); break;
-      case 'robed': m = new Humanoid({ skin: '#b89a80', hairStyle: 'bald', tunic: color, pants: darken(color, 0.2), boots: '#2a2a2a', helm: 'hood', helmColor: color, robe: true, scale: 1.0 * size * eliteScale, monster: true, eyeGlow: '#b36cff', weapon: 'staff' }); break;
+      case 'robed': m = new Humanoid({ skin: '#b89a80', hairStyle: 'bald', tunic: color, pants: darken(color, 0.2), boots: '#2a2a2a', helm: 'hood', helmColor: color, robe: true, scale: 1.0 * size * eliteScale, monster: true, eyeGlow: f === 'vampire' ? '#ff3b3b' : '#b36cff', weapon: fw === 'bow' ? 'wand' : fw }); break;
       case 'winged': m = new Humanoid({ skin: color, hairStyle: 'long', hair: darken(color, 0.5), tunic: darken(color, 0.2), pants: darken(color, 0.3), boots: darken(color, 0.4), body: 'lean', back: 'wings', scale: 1.05 * size * eliteScale, monster: true, eyeGlow: '#ff6a6a', horns: rank === 'boss' }); break;
       case 'boss': m = new Humanoid({ skin: color, hairStyle: 'wild', hair: '#1a1a1a', tunic: darken(color, 0.2), chest: darken(color, 0.1), pants: darken(color, 0.3), boots: '#1a1a1a', body: 'heavy', frame: 'broad', scale: 1.6 * size, monster: true, eyeGlow: '#ffe55c', horns: true, armored: true, hunch: 0.2, weapon: 'axe2h' }); break;
-      case 'humanoid': default: m = new Humanoid({ skin: shape === 'humanoid' ? mix(color, '#d9a877', 0.5) : color, hair: darken(color, 0.6), hairStyle: 'short', tunic: color, pants: darken(color, 0.4), boots: '#3a2a1a', scale: 1.0 * size * eliteScale, monster: true, eyeGlow: null, weapon: def.behavior === 'ranged' ? 'wand' : 'sword1h' }); if (shape !== 'humanoid') { } break;
+      case 'humanoid': default: m = new Humanoid(Object.assign({ skin: f === 'zombie' || f === 'drowned' ? color : mix(color, '#d9a877', 0.5), hair: darken(color, 0.6), hairStyle: 'short', tunic: f === 'zombie' ? darken(color, 0.4) : color, pants: darken(color, 0.4), boots: '#3a2a1a', scale: 1.0 * size * eliteScale, monster: true, eyeGlow: null, weapon: fw === 'bow' ? null : fw, offhand: fw === 'bow' ? 'bow' : (f === 'bandit' && def.behavior === 'melee' && Math.random() < 0.4 ? 'shield' : null), armored: def.id === 'bandit_captain' }, famTweak)); break;
       case 'beast': m = new Quadruped({ color, size: 0.9 * size * eliteScale }); break;
       case 'spider': m = spiderModel(color, size * eliteScale); break;
       case 'blob': m = blobModel(color, size * eliteScale); break;
@@ -414,6 +427,64 @@
   Models.gemDrop = function (color, big) { const m = mesh(geo('oct' + (big ? 1 : 0), () => new T.OctahedronGeometry(big ? 0.32 : 0.24, 0)), mat(color, { emissive: color, eint: big ? 1.0 : 0.5, metal: 0.3, rough: 0.3 }), 0, 0.4, 0); return m; };
   Models.goldDrop = function () { const g = new T.Group(); for (let i = 0; i < 3; i++) g.add(mesh(cyl(0.12, 0.12, 0.04, 10), mat('#ffd76a', { metal: 0.9, rough: 0.3, emissive: '#aa8020', eint: 0.3 }), (i - 1) * 0.12, 0.03 + (i % 2) * 0.04, (i % 2) * 0.1)); return g; };
   Models.orb = function () { return mesh(sphere(0.28, 12), mat('#ff3b3b', { emissive: '#ff3b3b', eint: 1.2, opacity: 0.9 }), 0, 0.35, 0); };
+
+
+  // ---------------------------------------------------------------- environment props
+  Models.prop = function (p, zone) {
+    const g = new T.Group(); const k = p.kind; const s = p.s || 1;
+    const wood = mat('#5a3a1a', { rough: 0.95 }), stone = mat('#6a6a70', { rough: 0.95, flat: true }), bone = mat('#d8d0c0', { rough: 0.9 }), iron = mat('#3a3a40', { metal: 0.6, rough: 0.5 });
+    switch (k) {
+      case 'log': { const l = mesh(cyl(0.22, 0.25, 1.8, 8), wood, 0, 0.22, 0); l.rotation.z = PI / 2; g.add(l); g.add(mesh(cyl(0.2, 0.2, 0.05, 8), mat('#a07a4a'), 0.92, 0.22, 0).rotateZ(PI / 2)); break; }
+      case 'stump': g.add(mesh(cyl(0.3, 0.38, 0.5, 9), wood, 0, 0.25, 0)); g.add(mesh(cyl(0.28, 0.28, 0.04, 9), mat('#a07a4a'), 0, 0.52, 0)); break;
+      case 'gravestone': { const st = mesh(box(0.5, 0.8, 0.14), stone, 0, 0.4, 0); st.rotation.z = (p.rot % 1) * 0.2 - 0.1; g.add(st); g.add(mesh(cyl(0.25, 0.25, 0.14, 12), stone, 0, 0.8, 0).rotateX(PI / 2)); break; }
+      case 'bonepile': { for (let i = 0; i < 5; i++) { const b = mesh(capsule(0.035, 0.3), bone, (i - 2) * 0.12, 0.05, (i % 2) * 0.15); b.rotation.set(PI / 2, 0, i * 0.7); g.add(b); } g.add(mesh(sphere(0.12, 10), bone, 0.15, 0.12, -0.1)); break; }
+      case 'rubble': for (let i = 0; i < 5; i++) { const r = mesh(ico(0.18 + (i % 3) * 0.08, 0), stone, (i - 2) * 0.25, 0.1, ((i * 7) % 3 - 1) * 0.25); r.rotation.set(i, i * 2, 0); g.add(r); } break;
+      case 'mushroom': { const col = zone.decor === 'swamp' ? '#9a6aff' : '#d05a3a'; for (let i = 0; i < 3; i++) { const h = 0.3 + (i % 2) * 0.2; g.add(mesh(cyl(0.05, 0.07, h, 6), mat('#e8dcc0'), (i - 1) * 0.25, h / 2, (i % 2) * 0.15)); const cap = mesh(sphere(0.16 + (i % 2) * 0.05, 8), mat(col, { emissive: zone.decor === 'swamp' ? col : undefined, eint: 0.4 }), (i - 1) * 0.25, h, (i % 2) * 0.15); cap.scale.y = 0.55; g.add(cap); } break; }
+      case 'crate': g.add(mesh(box(0.8, 0.8, 0.8), mat('#8a6a3a', { rough: 0.9 }), 0, 0.4, 0)); g.add(mesh(box(0.84, 0.06, 0.06), wood, 0, 0.4, 0.41)); g.add(mesh(box(0.06, 0.84, 0.06), wood, 0, 0.4, 0.41)); break;
+      case 'torch': { const pole = mesh(cyl(0.04, 0.05, 1.4, 6), wood, 0, 0.7, 0); g.add(pole); g.add(mesh(cyl(0.09, 0.07, 0.18, 6), iron, 0, 1.45, 0)); const fl = mesh(cone(0.09, 0.3, 6), mat('#ffa030', { emissive: '#ff8020', eint: 2.0 }), 0, 1.68, 0); g.add(fl); g.userData.flame = fl; break; }
+      case 'wallsconce': { g.add(mesh(cyl(0.1, 0.08, 0.2, 6), iron, 0, 1.8, 0)); const fl = mesh(cone(0.1, 0.32, 6), mat('#ffa030', { emissive: '#ff8020', eint: 2.0 }), 0, 2.05, 0); g.add(fl); g.userData.flame = fl; break; }
+      case 'brazier': { g.add(mesh(cyl(0.45, 0.3, 0.5, 10), iron, 0, 0.75, 0)); g.add(mesh(cyl(0.12, 0.2, 0.6, 8), iron, 0, 0.3, 0)); const fl = mesh(cone(0.3, 0.6, 8), mat('#ffa030', { emissive: '#ff8020', eint: 2.0 }), 0, 1.25, 0); g.add(fl); g.userData.flame = fl; g.add(mesh(sphere(0.2, 8), mat('#ffe080', { emissive: '#ffe080', eint: 2.5, opacity: 0.8 }), 0, 1.05, 0)); break; }
+      case 'campfire': { for (let i = 0; i < 4; i++) { const l = mesh(cyl(0.06, 0.07, 0.9, 6), wood, 0, 0.08, 0); l.rotation.set(PI / 2, 0, i * PI / 4); g.add(l); } for (let i = 0; i < 6; i++) g.add(mesh(ico(0.14, 0), stone, Math.cos(i) * 0.6, 0.08, Math.sin(i) * 0.6)); const fl = mesh(cone(0.25, 0.7, 7), mat('#ffa030', { emissive: '#ff7020', eint: 2.2 }), 0, 0.45, 0); g.add(fl); g.userData.flame = fl; break; }
+      case 'candles': for (let i = 0; i < 3; i++) { g.add(mesh(cyl(0.04, 0.04, 0.15 + (i % 2) * 0.08, 6), mat('#e8e0c0'), (i - 1) * 0.12, 0.1, 0)); g.add(mesh(sphere(0.03, 6), mat('#ffd060', { emissive: '#ffb030', eint: 2.5 }), (i - 1) * 0.12, 0.22 + (i % 2) * 0.08, 0)); } break;
+      case 'cobweb': { const w = new T.Mesh(Models.geo('web', () => new T.CircleGeometry(0.8, 8)), new T.MeshBasicMaterial({ color: '#ddd', transparent: true, opacity: 0.25, side: T.DoubleSide, depthWrite: false })); w.position.set(0, 1.4, 0); w.rotation.y = PI / 4; g.add(w); break; }
+      case 'chains': for (let i = 0; i < 2; i++) { const c = mesh(cyl(0.02, 0.02, 1.4, 5), iron, i * 0.3, 1.2, 0); c.rotation.z = 0.15 - i * 0.3; g.add(c); g.add(mesh(torus(0.12, 0.025), iron, i * 0.3 + (i ? -0.2 : 0.2), 0.5, 0)); } break;
+      case 'banner': { g.add(mesh(cyl(0.05, 0.06, 3.2, 6), wood, 0, 1.6, 0)); const b = mesh(box(0.9, 1.6, 0.03), mat(zone.id === 'kehjistan' ? '#8a2a6a' : '#8a1a2a', { rough: 0.9 }), 0, 2.2, 0.03); g.add(b); g.userData.cloth = b; g.add(mesh(sphere(0.07, 8), mat('#d8b25a', { metal: 0.8 }), 0, 3.25, 0)); break; }
+      case 'obelisk': { g.add(mesh(cyl(0.2, 0.4, 2.6, 4), mat('#4a4a58', { rough: 0.7, flat: true }), 0, 1.3, 0)); g.add(mesh(box(0.1, 0.9, 0.05), mat('#7fd6ff', { emissive: '#7fd6ff', eint: 1.2 }), 0, 1.3, 0.3)); break; }
+      case 'well': { g.add(mesh(cyl(0.9, 0.9, 0.8, 12), stone, 0, 0.4, 0)); g.add(mesh(cyl(0.7, 0.7, 0.1, 12), mat('#1a3a4a', { rough: 0.2, metal: 0.3 }), 0, 0.82, 0)); [-1, 1].forEach(sg => g.add(mesh(box(0.1, 1.4, 0.1), wood, sg * 0.8, 1.3, 0))); g.add(mesh(cone(1.1, 0.6, 4), wood, 0, 2.3, 0)); break; }
+      default: g.add(mesh(ico(0.3, 0), stone, 0, 0.2, 0));
+    }
+    g.scale.setScalar(s); g.rotation.y = p.rot || 0;
+    g.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    return g;
+  };
+  // obstacle kinds beyond tree/rock/pillar
+  Models.obstacleExtra = function (o, zone) {
+    const g = new T.Group(); const r = o.r;
+    const wood = mat('#5a3a1a', { rough: 0.95 }), stone = mat('#5a5a62', { rough: 0.95, flat: true });
+    switch (o.kind) {
+      case 'cactus': { g.add(mesh(capsule(0.22, 1.2), mat('#3a7a3a', { rough: 0.9 }), 0, 0.85, 0)); const a = mesh(capsule(0.12, 0.5), mat('#3a7a3a', { rough: 0.9 }), 0.35, 0.9, 0); a.rotation.z = -0.6; g.add(a); const b = mesh(capsule(0.12, 0.4), mat('#3a7a3a', { rough: 0.9 }), -0.32, 0.7, 0); b.rotation.z = 0.6; g.add(b); break; }
+      case 'palm': { const t = mesh(cyl(0.12, 0.2, 3.2, 7), wood, 0, 1.6, 0); t.rotation.z = 0.12; g.add(t); for (let i = 0; i < 6; i++) { const leaf = mesh(box(1.6, 0.04, 0.35), mat('#2f7a35', { rough: 0.9 }), Math.cos(i) * 0.7, 3.1, Math.sin(i) * 0.7); leaf.rotation.y = -i; leaf.rotation.z = -0.5; g.add(leaf); } break; }
+      case 'barrel': { g.add(mesh(cyl(0.4 * r / 0.45, 0.35 * r / 0.45, 0.9, 10), mat('#7a5a2a', { rough: 0.9 }), 0, 0.45, 0)); [0.2, 0.7].forEach(y => g.add(mesh(torus(0.4 * r / 0.45, 0.025), mat('#3a3a40', { metal: 0.6 }), 0, y, 0).rotateX(PI / 2))); break; }
+      case 'cart': { g.add(mesh(box(1.8, 0.5, 1.1), wood, 0, 0.7, 0)); [-1, 1].forEach(sg => { const w = mesh(cyl(0.45, 0.45, 0.1, 10), wood, sg * 0.7, 0.45, 0.6); w.rotation.x = PI / 2; g.add(w); const w2 = w.clone(); w2.position.z = -0.6; g.add(w2); }); g.add(mesh(box(0.1, 0.1, 1.6), wood, -1.2, 0.6, 0).rotateZ(0.3)); break; }
+      case 'tent': { g.add(mesh(cone(1.5, 1.6, 4), mat(zone.decor === 'snow' ? '#8a7a66' : '#7a6a4a', { rough: 0.95, flat: true }), 0, 0.8, 0)); g.add(mesh(cyl(0.04, 0.04, 1.6, 5), wood, 0, 0.8, 0)); break; }
+      case 'tower': { g.add(mesh(cyl(r * 0.9, r, 4.5, 10), stone, 0, 2.25, 0)); for (let i = 0; i < 8; i++) g.add(mesh(box(0.4, 0.5, 0.4), stone, Math.cos(i / 8 * PI * 2) * r * 0.85, 4.7, Math.sin(i / 8 * PI * 2) * r * 0.85)); break; }
+      case 'barricade': { for (let i = 0; i < 4; i++) { const s = mesh(cyl(0.06, 0.08, 1.6, 5), wood, (i - 1.5) * 0.5, 0.6, 0); s.rotation.z = (i % 2 ? 0.7 : -0.7); g.add(s); } g.add(mesh(box(2.2, 0.08, 0.08), wood, 0, 0.9, 0)); break; }
+      case 'well': return Models.prop({ kind: 'well', rot: 0 }, zone);
+      default: return Models.obstacle(o, zone.decor);
+    }
+    g.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    return g;
+  };
+  Models.hut = function (o) {
+    const g = new T.Group(); const w = o.hw * 2, d = o.hh * 2;
+    g.add(mesh(box(w, 2.2, d), mat('#6a5a46', { rough: 0.95 }), 0, 1.1, 0));
+    g.add(mesh(box(w + 0.1, 0.1, d + 0.1), mat('#3a2a1a'), 0, 2.25, 0));
+    const roof = mesh(cone(Math.max(w, d) * 0.78, 1.6, 4), mat('#5a3a22', { rough: 0.95, flat: true }), 0, 3.0, 0); roof.rotation.y = PI / 4; g.add(roof);
+    g.add(mesh(box(0.7, 1.3, 0.1), mat('#2a1a0a'), 0, 0.65, d / 2 + 0.03));
+    g.add(mesh(box(0.5, 0.5, 0.1), mat('#ffd080', { emissive: '#ffb050', eint: 1.0 }), w / 2 - 0.6, 1.3, d / 2 + 0.03));
+    g.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    return g;
+  };
 
   window.Models = Models;
 })();
